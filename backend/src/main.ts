@@ -5,7 +5,9 @@ import { AppModule } from './app.module.js';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  app.setGlobalPrefix('api/smart-cabinet-vn/v1');
+  // app.setGlobalPrefix('api/medical-supplies-rajavithi/v1');
+  app.setGlobalPrefix('api/' + process.env.API_NAME + '/v1');
+
   app.useGlobalPipes(
     new ValidationPipe({
       /** ตัด property ที่ไม่มีใน DTO — ไม่ reject (หลีกเลี่ยง 400 เมื่อ client แนบฟิลด์เกิน เช่น payload มิกซ์กับระบบอื่น) */
@@ -20,16 +22,16 @@ async function bootstrap() {
   const allowedOrigins = process.env.CORS_ORIGIN
     ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim())
     : [
-        'http://localhost:3100',
-        'http://127.0.0.1:3100',
-        'http://localhost:4100',
-        'http://127.0.0.1:4100',
-        'http://10.11.9.84:3100',
-        'http://10.11.9.84:4100',
-        'https://phc.dyndns.biz',
-        'https://poseintelligence.co.th',
-        'https://www.poseintelligence.co.th',
-      ];
+      'http://localhost:3100',
+      'http://127.0.0.1:3100',
+      'http://localhost:4100',
+      'http://127.0.0.1:4100',
+      'http://10.11.9.84:3100',
+      'http://10.11.9.84:4100',
+      'https://phc.dyndns.biz',
+      'https://poseintelligence.co.th',
+      'https://www.poseintelligence.co.th',
+    ];
   app.enableCors({
     origin: allowedOrigins,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
