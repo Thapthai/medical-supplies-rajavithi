@@ -10,7 +10,7 @@
  *
  * รีโหลดหลังแก้ .env — อย่าใช้แค่ `pm2 restart` เพราะมักถือ env เก่า
  *   pm2 reload ecosystem.config.cjs --update-env
- *   หรือ pm2 delete med-supplies-vtn-next-app && pm2 start ecosystem.config.cjs
+ *   หรือ pm2 delete med-supplies-rajavithi-next-app && pm2 start ecosystem.config.cjs
  *
  * สำคัญ:
  * - NEXTAUTH_URL ต้องตรงกับ URL ที่ผู้ใช้เปิด (เช่น http://10.1.1.10:7200/med-supplies ไม่ใช่แค่ localhost)
@@ -83,7 +83,7 @@ for (const key of passthroughKeys) {
 module.exports = {
   apps: [
     {
-      name: 'med-supplies-vtn-next-app',
+      name: 'med-supplies-rajavithi-next-app',
       cwd: __dirname,
       script: path.join(__dirname, 'node_modules', 'next', 'dist', 'bin', 'next'),
       args: 'start',
