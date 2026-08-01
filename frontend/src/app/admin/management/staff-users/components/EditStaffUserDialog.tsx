@@ -1,0 +1,205 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { staffUserApi } from '@/lib/api';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import type { StaffUser, StaffRoleOption } from './types';
+import { selectableStaffRoles } from './types';
+import { StaffEmployeePicker } from './StaffEmployeePicker';
+import { cn } from '@/lib/utils';
+
+const fieldInputClass = 'bg-white';
+
+interface EditStaffUserDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  staff: StaffUser | null;
+  staffRoles: StaffRoleOption[];
+  onSuccess: () => void;
+}
+
+export function EditStaffUserDialog({ open, onOpenChange, staff, staffRoles, onSuccess }: EditStaffUserDialogProps) {
+  const roleOptions = selectableStaffRoles(staffRoles);
+  const [inactiveRoleNotice, setInactiveRoleNotice] = useState<string | null>(null);
+  const [formData, setFormData] = useState({
+    email: '',
+    fname: '',
+    lname: '',
+    role: '',
+    password: '',
+    expires_at: '',
+    is_active: '1',
+  });
+  const [empCode, setEmpCode] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open || !staff) return;
+    const code = staff.role?.trim() || '';
+    const selectable = selectableStaffRoles(staffRoles);
+    const roleInList = !!(code && selectable.some((r) => r.code === code));
+
+    setInactiveRoleNotice(
+      code && !roleInList
+        ? `บทบาทปัจจุบัน (${staff.role_name?.trim() || code}) ปิดใช้งานแล้ว — กรุณาเลือกบทบาทใหม่`
+        : null,
+    );
+    setFormData({
+      email: staff.email,
+      fname: staff.fname,
+      lname: staff.lname,
+      role: roleInList ? code : '',
+      password: '',
+      expires_at: staff.expires_at || '',
+      is_active: staff.is_active === false || staff.isUser === 0 ? '0' : '1',
+    });
+    setEmpCode(staff.emp_code ?? null);
+  }, [open, staff, staffRoles]);
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!staff) return;
+    if (!formData.role?.trim()) {
+      toast.error('กรุณาเลือกบทบาท (Role) ที่เปิดใช้งาน');
+      return;
+    }
+    if (!roleOptions.some((r) => r.code === formData.role)) {
+      toast.error('บทบาทที่เลือกปิดใช้งานแล้ว ไม่สามารถใช้ได้');
+      return;
+    }
+    try {
+      const updateData: Record<string, unknown> = {
+        email: formData.email,
+        fname: formData.fname,
+        lname: formData.lname,
+      };
+      if (formData.role) updateData.role_code = formData.role;
+      if (formData.password && formData.password !== 'password123') updateData.password = formData.password;
+      if (formData.expires_at) updateData.expires_at = formData.expires_at;
+      updateData.is_active = formData.is_active === '1';
+      updateData.emp_code = empCode;
+
+      const response = (await staffUserApi.updateStaffUser(staff.id, updateData)) as { success?: boolean; message?: string };
+      if (response?.success) {
+        toast.success('อัปเดต Staff User เรียบร้อยแล้ว');
+        onOpenChange(false);
+        onSuccess();
+      } else {
+        toast.error((response as { message?: string })?.message || 'ไม่สามารถอัปเดต Staff User ได้');
+      }
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      toast.error(err?.message || 'ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์');
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>แก้ไข บัญชีผู้ใช้งาน</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleUpdate} className="space-y-4">
+          <div>
+            <Label htmlFor="edit-email">อีเมล *</Label>
+            <Input
+              id="edit-email"
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              required
+              className={fieldInputClass}
+            />
+          </div>
+          <div>
+            <Label htmlFor="edit-fname">ชื่อจริง *</Label>
+            <Input id="edit-fname" value={formData.fname} onChange={(e) => setFormData({ ...formData, fname: e.target.value })} required className={fieldInputClass} />
+          </div>
+          <div>
+            <Label htmlFor="edit-lname">นามสกุล *</Label>
+            <Input id="edit-lname" value={formData.lname} onChange={(e) => setFormData({ ...formData, lname: e.target.value })} required className={fieldInputClass} />
+          </div>
+          {staff ? (
+            <StaffEmployeePicker
+              value={empCode}
+              onChange={setEmpCode}
+              exceptUserId={staff.id}
+              currentEmployeeLabel={staff.employee_display}
+            />
+          ) : null}
+          <div>
+            <Label>สถานะ </Label>
+            <Select
+              value={formData.is_active}
+              onValueChange={(value) => setFormData({ ...formData, is_active: value })}
+            >
+              <SelectTrigger className={cn('w-full', fieldInputClass)}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1">ใช้งาน</SelectItem>
+                <SelectItem value="0">ปิดการใช้งาน</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>บทบาท (Role) *</Label>
+            {inactiveRoleNotice ? (
+              <p className="mb-2 text-xs text-amber-700">{inactiveRoleNotice}</p>
+            ) : null}
+            <Select
+              value={formData.role || undefined}
+              onValueChange={(value) => setFormData({ ...formData, role: value })}
+              required
+              disabled={roleOptions.length === 0}
+            >
+              <SelectTrigger className={cn('w-full', fieldInputClass)}>
+                <SelectValue placeholder={roleOptions.length === 0 ? 'ไม่มีบทบาทที่เปิดใช้งาน' : 'เลือกบทบาท'} />
+              </SelectTrigger>
+              <SelectContent>
+                {roleOptions.map((role) => (
+                  <SelectItem key={role.id} value={role.code}>
+                    {role.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="edit-password">รหัสผ่านใหม่ (ถ้าต้องการเปลี่ยน)</Label>
+            <Input
+              id="edit-password"
+              type="password"
+              value={formData.password}
+              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              placeholder="ปล่อยว่างถ้าไม่ต้องการเปลี่ยน"
+              className={fieldInputClass}
+            />
+          </div>
+          <div>
+            <Label htmlFor="edit-expires_at">วันหมดอายุ Client Credentials</Label>
+            <Input
+              id="edit-expires_at"
+              type="datetime-local"
+              value={formData.expires_at}
+              onChange={(e) => setFormData({ ...formData, expires_at: e.target.value })}
+              className={fieldInputClass}
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button type="submit" className="flex-1">
+              บันทึก
+            </Button>
+            <Button type="button" variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>
+              ยกเลิก
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}

@@ -1,0 +1,29 @@
+# Dependencies and build output (rebuilt in image)
+node_modules
+dist
+generated
+npm-debug.log*
+
+# Git and IDE
+.git
+.gitignore
+.cursor
+.vscode
+*.swp
+*.swo
+
+# Test and coverage
+coverage
+test
+*.spec.ts
+*.e2e-spec.ts
+jest*.json
+
+# Env (use build args or compose env)
+.env
+.env.*
+!.env.example
+
+# Docs and misc (optional to exclude)
+*.md
+!README.md

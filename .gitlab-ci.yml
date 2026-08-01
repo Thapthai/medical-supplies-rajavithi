@@ -1,0 +1,418 @@
+# GitLab CI/CD Pipeline for POSE Microservices
+# =============================================
+
+# Define stages
+stages:
+  - test
+  - build
+  - deploy
+  - cleanup
+
+# Global variables
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+  # Docker Registry (GitLab Container Registry)
+  REGISTRY: $CI_REGISTRY
+  REGISTRY_USER: $CI_REGISTRY_USER
+  REGISTRY_PASSWORD: $CI_REGISTRY_PASSWORD
+  # Image tags
+  BACKEND_AUTH_IMAGE: $CI_REGISTRY_IMAGE/backend-auth-service
+  BACKEND_GATEWAY_IMAGE: $CI_REGISTRY_IMAGE/backend-gateway-api
+  BACKEND_ITEM_IMAGE: $CI_REGISTRY_IMAGE/backend-item-service
+  BACKEND_EMAIL_IMAGE: $CI_REGISTRY_IMAGE/backend-email-service
+  BACKEND_CATEGORY_IMAGE: $CI_REGISTRY_IMAGE/backend-category-service
+  FRONTEND_IMAGE: $CI_REGISTRY_IMAGE/frontend-pose
+  # Kubernetes
+  KUBE_NAMESPACE: pose-microservices
+  KUBE_CONTEXT: production
+
+# Cache configuration
+cache:
+  key: ${CI_COMMIT_REF_SLUG}
+  paths:
+    - backend/node_modules/
+    - frontend/node_modules/
+    - backend/.npm/
+    - frontend/.npm/
+
+# ========================================
+# BACKEND JOBS
+# ========================================
+
+# Backend: Install Dependencies & Test
+backend:test:
+  stage: test
+  image: node:20-alpine
+  only:
+    changes:
+      - backend/**/*
+      - .gitlab-ci.yml
+  script:
+    - cd backend
+    - npm ci --cache .npm --prefer-offline
+    - npm run lint || true
+    - npm run test || true
+  artifacts:
+    reports:
+      junit: backend/test-results/*.xml
+    paths:
+      - backend/coverage/
+    expire_in: 1 week
+  tags:
+    - docker
+
+# Backend: Build Auth Service
+backend:build:auth:
+  stage: build
+  image: docker:24-dind
+  services:
+    - docker:24-dind
+  only:
+    changes:
+      - backend/**/*
+      - .gitlab-ci.yml
+  before_script:
+    - docker login -u $REGISTRY_USER -p $REGISTRY_PASSWORD $REGISTRY
+  script:
+    - cd backend
+    - |
+      docker build --target production \
+        -f docker/Dockerfile.auth \
+        -t $BACKEND_AUTH_IMAGE:$CI_COMMIT_SHORT_SHA \
+        -t $BACKEND_AUTH_IMAGE:latest \
+        .
+    - docker push $BACKEND_AUTH_IMAGE:$CI_COMMIT_SHORT_SHA
+    - docker push $BACKEND_AUTH_IMAGE:latest
+  after_script:
+    - docker logout $REGISTRY
+  tags:
+    - docker
+
+# Backend: Build Gateway Service
+backend:build:gateway:
+  stage: build
+  image: docker:24-dind
+  services:
+    - docker:24-dind
+  only:
+    changes:
+      - backend/**/*
+      - .gitlab-ci.yml
+  before_script:
+    - docker login -u $REGISTRY_USER -p $REGISTRY_PASSWORD $REGISTRY
+  script:
+    - cd backend
+    - |
+      docker build --target production \
+        -f docker/Dockerfile.gateway \
+        -t $BACKEND_GATEWAY_IMAGE:$CI_COMMIT_SHORT_SHA \
+        -t $BACKEND_GATEWAY_IMAGE:latest \
+        .
+    - docker push $BACKEND_GATEWAY_IMAGE:$CI_COMMIT_SHORT_SHA
+    - docker push $BACKEND_GATEWAY_IMAGE:latest
+  after_script:
+    - docker logout $REGISTRY
+  tags:
+    - docker
+
+# Backend: Build Item Service
+backend:build:item:
+  stage: build
+  image: docker:24-dind
+  services:
+    - docker:24-dind
+  only:
+    changes:
+      - backend/**/*
+      - .gitlab-ci.yml
+  before_script:
+    - docker login -u $REGISTRY_USER -p $REGISTRY_PASSWORD $REGISTRY
+  script:
+    - cd backend
+    - |
+      docker build --target production \
+        -f docker/Dockerfile.item \
+        -t $BACKEND_ITEM_IMAGE:$CI_COMMIT_SHORT_SHA \
+        -t $BACKEND_ITEM_IMAGE:latest \
+        .
+    - docker push $BACKEND_ITEM_IMAGE:$CI_COMMIT_SHORT_SHA
+    - docker push $BACKEND_ITEM_IMAGE:latest
+  after_script:
+    - docker logout $REGISTRY
+  tags:
+    - docker
+
+# Backend: Build Email Service
+backend:build:email:
+  stage: build
+  image: docker:24-dind
+  services:
+    - docker:24-dind
+  only:
+    changes:
+      - backend/**/*
+      - .gitlab-ci.yml
+  before_script:
+    - docker login -u $REGISTRY_USER -p $REGISTRY_PASSWORD $REGISTRY
+  script:
+    - cd backend
+    - |
+      docker build --target production \
+        -f docker/Dockerfile.email \
+        -t $BACKEND_EMAIL_IMAGE:$CI_COMMIT_SHORT_SHA \
+        -t $BACKEND_EMAIL_IMAGE:latest \
+        .
+    - docker push $BACKEND_EMAIL_IMAGE:$CI_COMMIT_SHORT_SHA
+    - docker push $BACKEND_EMAIL_IMAGE:latest
+  after_script:
+    - docker logout $REGISTRY
+  tags:
+    - docker
+
+# Backend: Build Category Service
+backend:build:category:
+  stage: build
+  image: docker:24-dind
+  services:
+    - docker:24-dind
+  only:
+    changes:
+      - backend/**/*
+      - .gitlab-ci.yml
+  before_script:
+    - docker login -u $REGISTRY_USER -p $REGISTRY_PASSWORD $REGISTRY
+  script:
+    - cd backend
+    - |
+      docker build --target production \
+        -f docker/Dockerfile.category \
+        -t $BACKEND_CATEGORY_IMAGE:$CI_COMMIT_SHORT_SHA \
+        -t $BACKEND_CATEGORY_IMAGE:latest \
+        .
+    - docker push $BACKEND_CATEGORY_IMAGE:$CI_COMMIT_SHORT_SHA
+    - docker push $BACKEND_CATEGORY_IMAGE:latest
+  after_script:
+    - docker logout $REGISTRY
+  tags:
+    - docker
+
+# ========================================
+# FRONTEND JOBS
+# ========================================
+
+# Frontend: Install Dependencies & Test
+frontend:test:
+  stage: test
+  image: node:20-alpine
+  only:
+    changes:
+      - frontend/**/*
+      - .gitlab-ci.yml
+  script:
+    - cd frontend
+    - npm ci --cache .npm --prefer-offline
+    - npm run type-check
+    - npm run lint || true
+    - npm run build
+  artifacts:
+    paths:
+      - frontend/.next/
+    expire_in: 1 hour
+  tags:
+    - docker
+
+# Frontend: Build Docker Image
+frontend:build:
+  stage: build
+  image: docker:24-dind
+  services:
+    - docker:24-dind
+  only:
+    changes:
+      - frontend/**/*
+      - .gitlab-ci.yml
+  before_script:
+    - docker login -u $REGISTRY_USER -p $REGISTRY_PASSWORD $REGISTRY
+  script:
+    - cd frontend
+    - |
+      docker build \
+        -f docker/Dockerfile \
+        -t $FRONTEND_IMAGE:$CI_COMMIT_SHORT_SHA \
+        -t $FRONTEND_IMAGE:latest \
+        .
+    - docker push $FRONTEND_IMAGE:$CI_COMMIT_SHORT_SHA
+    - docker push $FRONTEND_IMAGE:latest
+  after_script:
+    - docker logout $REGISTRY
+  tags:
+    - docker
+
+# ========================================
+# DEPLOYMENT JOBS
+# ========================================
+
+# Deploy to Development
+deploy:dev:
+  stage: deploy
+  image: bitnami/kubectl:latest
+  only:
+    - develop
+  environment:
+    name: development
+    url: http://dev.pose.example.com
+  before_script:
+    - kubectl config use-context $KUBE_CONTEXT
+  script:
+    - echo "Deploying to Development..."
+    # Update image tags in K8s deployments
+    - |
+      kubectl set image deployment/auth-service \
+        auth-service=$BACKEND_AUTH_IMAGE:$CI_COMMIT_SHORT_SHA \
+        -n $KUBE_NAMESPACE
+    - |
+      kubectl set image deployment/gateway-api \
+        gateway-api=$BACKEND_GATEWAY_IMAGE:$CI_COMMIT_SHORT_SHA \
+        -n $KUBE_NAMESPACE
+    - |
+      kubectl set image deployment/item-service \
+        item-service=$BACKEND_ITEM_IMAGE:$CI_COMMIT_SHORT_SHA \
+        -n $KUBE_NAMESPACE
+    - |
+      kubectl set image deployment/email-service \
+        email-service=$BACKEND_EMAIL_IMAGE:$CI_COMMIT_SHORT_SHA \
+        -n $KUBE_NAMESPACE
+    - |
+      kubectl set image deployment/category-service \
+        category-service=$BACKEND_CATEGORY_IMAGE:$CI_COMMIT_SHORT_SHA \
+        -n $KUBE_NAMESPACE
+    - |
+      kubectl set image deployment/frontend \
+        frontend=$FRONTEND_IMAGE:$CI_COMMIT_SHORT_SHA \
+        -n $KUBE_NAMESPACE
+    # Wait for rollout
+    - kubectl rollout status deployment/auth-service -n $KUBE_NAMESPACE
+    - kubectl rollout status deployment/gateway-api -n $KUBE_NAMESPACE
+    - kubectl rollout status deployment/frontend -n $KUBE_NAMESPACE
+  tags:
+    - kubernetes
+
+# Deploy to Staging
+deploy:staging:
+  stage: deploy
+  image: bitnami/kubectl:latest
+  only:
+    - staging
+  environment:
+    name: staging
+    url: http://staging.pose.example.com
+  before_script:
+    - kubectl config use-context $KUBE_CONTEXT
+  script:
+    - echo "Deploying to Staging..."
+    - |
+      kubectl set image deployment/auth-service \
+        auth-service=$BACKEND_AUTH_IMAGE:$CI_COMMIT_SHORT_SHA \
+        -n $KUBE_NAMESPACE
+    - |
+      kubectl set image deployment/gateway-api \
+        gateway-api=$BACKEND_GATEWAY_IMAGE:$CI_COMMIT_SHORT_SHA \
+        -n $KUBE_NAMESPACE
+    - |
+      kubectl set image deployment/item-service \
+        item-service=$BACKEND_ITEM_IMAGE:$CI_COMMIT_SHORT_SHA \
+        -n $KUBE_NAMESPACE
+    - |
+      kubectl set image deployment/email-service \
+        email-service=$BACKEND_EMAIL_IMAGE:$CI_COMMIT_SHORT_SHA \
+        -n $KUBE_NAMESPACE
+    - |
+      kubectl set image deployment/category-service \
+        category-service=$BACKEND_CATEGORY_IMAGE:$CI_COMMIT_SHORT_SHA \
+        -n $KUBE_NAMESPACE
+    - |
+      kubectl set image deployment/frontend \
+        frontend=$FRONTEND_IMAGE:$CI_COMMIT_SHORT_SHA \
+        -n $KUBE_NAMESPACE
+    - kubectl rollout status deployment/auth-service -n $KUBE_NAMESPACE
+    - kubectl rollout status deployment/gateway-api -n $KUBE_NAMESPACE
+    - kubectl rollout status deployment/frontend -n $KUBE_NAMESPACE
+  tags:
+    - kubernetes
+
+# Deploy to Production (Manual)
+deploy:production:
+  stage: deploy
+  image: bitnami/kubectl:latest
+  only:
+    - main
+    - master
+  when: manual
+  environment:
+    name: production
+    url: http://pose.example.com
+  before_script:
+    - kubectl config use-context $KUBE_CONTEXT
+  script:
+    - echo "Deploying to Production..."
+    # Create backup of current deployment
+    - kubectl get deployment -n $KUBE_NAMESPACE -o yaml > backup-$(date +%Y%m%d-%H%M%S).yaml
+    # Update images
+    - |
+      kubectl set image deployment/auth-service \
+        auth-service=$BACKEND_AUTH_IMAGE:$CI_COMMIT_SHORT_SHA \
+        -n $KUBE_NAMESPACE
+    - |
+      kubectl set image deployment/gateway-api \
+        gateway-api=$BACKEND_GATEWAY_IMAGE:$CI_COMMIT_SHORT_SHA \
+        -n $KUBE_NAMESPACE
+    - |
+      kubectl set image deployment/item-service \
+        item-service=$BACKEND_ITEM_IMAGE:$CI_COMMIT_SHORT_SHA \
+        -n $KUBE_NAMESPACE
+    - |
+      kubectl set image deployment/email-service \
+        email-service=$BACKEND_EMAIL_IMAGE:$CI_COMMIT_SHORT_SHA \
+        -n $KUBE_NAMESPACE
+    - |
+      kubectl set image deployment/category-service \
+        category-service=$BACKEND_CATEGORY_IMAGE:$CI_COMMIT_SHORT_SHA \
+        -n $KUBE_NAMESPACE
+    - |
+      kubectl set image deployment/frontend \
+        frontend=$FRONTEND_IMAGE:$CI_COMMIT_SHORT_SHA \
+        -n $KUBE_NAMESPACE
+    # Wait for rollout with timeout
+    - kubectl rollout status deployment/auth-service -n $KUBE_NAMESPACE --timeout=5m
+    - kubectl rollout status deployment/gateway-api -n $KUBE_NAMESPACE --timeout=5m
+    - kubectl rollout status deployment/item-service -n $KUBE_NAMESPACE --timeout=5m
+    - kubectl rollout status deployment/email-service -n $KUBE_NAMESPACE --timeout=5m
+    - kubectl rollout status deployment/category-service -n $KUBE_NAMESPACE --timeout=5m
+    - kubectl rollout status deployment/frontend -n $KUBE_NAMESPACE --timeout=5m
+    - echo "Production deployment completed successfully!"
+  artifacts:
+    paths:
+      - backup-*.yaml
+    expire_in: 30 days
+  tags:
+    - kubernetes
+
+# ========================================
+# CLEANUP JOBS
+# ========================================
+
+# Clean up old images
+cleanup:registry:
+  stage: cleanup
+  image: docker:24
+  only:
+    - main
+    - master
+  when: manual
+  script:
+    - echo "Cleanup would happen here"
+    # GitLab registry cleanup is usually done via API or UI
+  tags:
+    - docker
+

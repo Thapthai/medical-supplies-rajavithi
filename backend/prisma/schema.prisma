@@ -1,0 +1,930 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model User {
+  id                    Int       @id @default(autoincrement())
+  email                 String    @unique
+  password              String? // Optional for OAuth users
+  fname                 String // First name
+  lname                 String // Last name
+  department_id         Int?      @map("department_id") // Department ID
+  is_active             Boolean   @default(true)
+  email_verified        Boolean   @default(false)
+  preferred_auth_method String    @default("jwt")
+  last_login_at         DateTime?
+  client_id             String    @unique @map("client_id") // For API access
+  client_secret         String    @map("client_secret") // Hashed secret
+  expires_at            DateTime? @map("expires_at") // Client credential expiration
+  is_admin              Boolean   @default(false) @map("is_admin")
+  role_id               Int?      @map("role_id")
+  emp_code              String?   @unique @map("emp_code") @db.VarChar(20) // ผูก employee.EmpCode
+
+  // 2FA Fields
+  two_factor_enabled     Boolean   @default(false) @map("two_factor_enabled")
+  two_factor_secret      String?   @map("two_factor_secret") // TOTP secret
+  backup_codes           String?   @map("backup_codes") @db.Text // JSON string of backup codes
+  two_factor_verified_at DateTime? @map("two_factor_verified_at")
+
+  created_at DateTime @default(dbgenerated("NOW()")) @map("created_at")
+  updated_at DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  oauth_accounts              OAuthAccount[]
+  api_keys                    ApiKey[]
+  client_credentials          ClientCredential[]
+  refreshTokens               RefreshToken[]
+  two_factor_tokens           TwoFactorToken[]
+  role                        StaffRole?                   @relation(fields: [role_id], references: [id])
+  department                  Department?                  @relation(fields: [department_id], references: [ID])
+  /// ผูกกับ employee.EmpCode — ว่างได้ถ้ายังไม่ map พนักงานในระบบ HR
+  employee                    Employee?                    @relation(fields: [emp_code], references: [EmpCode])
+  staffPermissionDepartments  StaffPermissionDepartment[]
+  departmentDispenseDocuments DepartmentDispenseDocument[]
+
+  @@map("app_users")
+}
+
+model StaffRole {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique // e.g. IT-001, WH-001, it2, warehouse2
+  name        String // 'IT 1', 'IT 2', 'Warehouse 1', etc.
+  description String?  @db.Text // Description of the role
+  is_active   Boolean  @default(true) @map("is_active")
+  created_at  DateTime @default(dbgenerated("NOW()")) @map("created_at")
+  updated_at  DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  rolePermissions StaffRolePermission[]
+  /// ว่าง = role นี้เห็นข้อมูลทุกแผนกหลัก; มีแถว = เห็นเฉพาะแผนกหลักที่ระบุ (หลายแถวได้)
+  users           User[]
+
+  @@index([code], name: "idx_code")
+  @@index([is_active], name: "idx_is_active")
+  @@map("app_staff_roles")
+}
+
+model StaffRolePermission {
+  id         Int      @id @default(autoincrement())
+  role_id    Int      @map("role_id") // Foreign key to StaffRole
+  menu_href  String   @map("menu_href") // Menu href path, e.g., '/staff/dashboard'
+  can_access Boolean  @default(true) @map("can_access")
+  created_at DateTime @default(dbgenerated("NOW()")) @map("created_at")
+  updated_at DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  role StaffRole @relation(fields: [role_id], references: [id])
+
+  @@unique([role_id, menu_href], name: "role_menu_href")
+  @@index([role_id], name: "idx_role_id")
+  @@index([menu_href], name: "idx_menu_href")
+  @@map("app_staff_role_permissions")
+}
+
+model StaffPermissionDepartment {
+  id            Int      @id @default(autoincrement())
+  user_id       Int      @map("user_id")
+  department_id Int      @map("department_id")
+  created_at    DateTime @default(dbgenerated("NOW()")) @map("created_at")
+  updated_at    DateTime @updatedAt @map("updated_at")
+
+  user       User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  department Department @relation(fields: [department_id], references: [ID], onDelete: Cascade)
+
+  @@unique([user_id, department_id], name: "uniq_user_department")
+  @@index([user_id], name: "idx_spd_user_id")
+  @@map("app_staff_permission_departments")
+}
+
+model OAuthAccount {
+  id            Int       @id @default(autoincrement())
+  user_id       Int       @map("user_id")
+  provider      String // google, github, facebook, etc.
+  provider_id   String    @map("provider_id")
+  access_token  String?   @map("access_token") @db.Text
+  refresh_token String?   @map("refresh_token") @db.Text
+  expires_at    DateTime? @map("expires_at")
+  token_type    String?   @map("token_type")
+  scope         String?
+  created_at    DateTime  @default(dbgenerated("NOW()")) @map("created_at")
+  updated_at    DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([provider, provider_id])
+  @@map("app_oauth_accounts")
+}
+
+model ApiKey {
+  id           Int       @id @default(autoincrement())
+  user_id      Int       @map("user_id")
+  name         String
+  description  String?
+  key_hash     String    @unique @map("key_hash")
+  prefix       String // First 8 chars for identification
+  is_active    Boolean   @default(true) @map("is_active")
+  last_used_at DateTime? @map("last_used_at")
+  expires_at   DateTime? @map("expires_at")
+  created_at   DateTime  @default(dbgenerated("NOW()")) @map("created_at")
+  updated_at   DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("app_api_keys")
+}
+
+model ClientCredential {
+  id                 Int       @id @default(autoincrement())
+  user_id            Int       @map("user_id")
+  name               String
+  description        String?
+  client_id          String    @unique @map("client_id")
+  client_secret_hash String    @map("client_secret_hash")
+  is_active          Boolean   @default(true) @map("is_active")
+  last_used_at       DateTime? @map("last_used_at")
+  expires_at         DateTime? @map("expires_at")
+  created_at         DateTime  @default(dbgenerated("NOW()")) @map("created_at")
+  updated_at         DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([client_id])
+  @@map("app_client_credentials")
+}
+
+model RefreshToken {
+  id         Int      @id @default(autoincrement())
+  user_id    Int      @map("user_id")
+  token      String   @unique
+  expires_at DateTime @map("expires_at")
+  is_revoked Boolean  @default(false) @map("is_revoked")
+  created_at DateTime @default(dbgenerated("NOW()")) @map("created_at")
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("app_refresh_tokens")
+}
+
+model TwoFactorToken {
+  id         Int      @id @default(autoincrement())
+  user_id    Int      @map("user_id")
+  token      String
+  type       String // 'email_otp', 'sms_otp', 'backup_code'
+  expires_at DateTime @map("expires_at")
+  isUsed     Boolean  @default(false) @map("is_used")
+  created_at DateTime @default(dbgenerated("NOW()")) @map("created_at")
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, type])
+  @@map("app_two_factor_tokens")
+}
+
+model Category {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  slug        String   @unique
+  image       String?
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(dbgenerated("NOW()")) @map("created_at")
+  updated_at  DateTime @updatedAt @map("updated_at")
+
+  @@map("app_categories")
+}
+
+model Item {
+  itemcode                 String    @id @db.VarChar(25)
+  itemname                 String?   @db.VarChar(255)
+  Alternatename            String?   @db.VarChar(100)
+  Barcode                  String?   @db.VarChar(50)
+  IsSet                    String?   @db.VarChar(1)
+  IsReuse                  String?   @db.VarChar(1)
+  IsNormal                 String?   @default("1") @db.VarChar(1)
+  itemtypeID               Int?
+  UnitID                   Int?      @default(0)
+  /// FK units.ID — หน่วยการเบิกสำหรับป้าย/คำอธิบาย (เช่น เม็ด) ไม่ใช้ในสูตร stock
+  SubUnitID                Int?      @map("sub_unit_id")
+  /// จำนวนหน่วยการเบิกต่อ 1 หน่วย (เช่น 18 เม็ด/กล่อง) — แสดงผลเท่านั้น
+  SubUnitQty               Int?      @map("sub_unit_qty")
+  SpecialID                Int?      @default(0)
+  DepartmentID             Int?      @default(0)
+  ShelfLifeID              Int?      @default(0)
+  SetCount                 Int?      @default(0)
+  PackingMatID             Int?      @default(0)
+  CostPrice                Decimal?  @db.Decimal(10, 2)
+  SalePrice                Decimal?  @db.Decimal(10, 2)
+  UsagePrice               Decimal?  @db.Decimal(10, 2)
+  SterileMachineID         Int?      @default(0)
+  SterileProcessID         Int?      @default(0)
+  WashMachineID            Int?      @default(0)
+  WashProcessID            Int?      @default(0)
+  SupllierID               Int?      @default(0)
+  FactID                   Int?      @default(0)
+  LabelID                  Int?      @default(0)
+  Minimum                  Int?      @default(0)
+  Maximum                  Int?      @default(0)
+  weight                   Decimal?  @db.Decimal(10, 2)
+  IsSpecial                String?   @default("0") @db.VarChar(1)
+  LabelGroupID             Int?
+  Picture                  String?   @db.VarChar(100)
+  Picture2                 String?   @db.VarChar(100)
+  NoWash                   Boolean?  @default(false)
+  IsWashDept               Int?      @default(0)
+  PriceID                  Int?      @default(0)
+  itemcode2                String?   @db.VarChar(20)
+  IsNonUsage               Boolean?  @default(false)
+  itemcode3                String?   @db.VarChar(20)
+  IsPrintDepartment        Boolean?  @default(true)
+  IsStock                  Boolean?  @default(true)
+  IsRecieveRecordOnly      Boolean?  @default(false)
+  IsWasting                Boolean?  @default(false)
+  IsCheckList              Boolean?  @default(false)
+  RoundOfTimeUsed          Int?      @default(0)
+  NoWashType               Int?      @default(0)
+  CreateDate               DateTime? @default(now())
+  IsCSSDComfirm            Int?      @default(0)
+  IsDenger                 Int?      @default(0)
+  IsInternalIndicatorCheck Int?      @default(0)
+  IsFillterCheck           Int?      @default(0)
+  IsLabelingCheck          Int?      @default(0)
+  IsLoaner                 Int?
+  LimitUse                 Int?      @default(0)
+  PayDep                   Int?      @default(0)
+  IsRemarkRound            Int?      @default(0)
+  IsReceiveNotSterile      Boolean?  @default(true)
+  IsReceiveManual          Boolean?  @default(true)
+  RefNo                    String?
+  IsCancel                 Int?      @default(0)
+  IsSingle                 Boolean?  @default(false)
+  IsNotShowSendSterile     Boolean?  @default(false)
+  Store                    String?
+  PackingMat               String?
+  ShelfLife                Int?      @default(0)
+  ManufacturerName         String?
+  item_data_1_id           Int?
+  InternalCode             String?
+  ManufacturerMemo         String?
+  item_data_1              Int?
+  Picweb                   String?   @db.MediumText
+  SuplierName              String?
+  IsNoSterile              Boolean?  @default(false)
+  IsShowQrItemCode         Boolean?  @default(false)
+  SuplierNameMemo          String?
+  IsSingleUsage            Boolean?  @default(false)
+  ListUnderLineNo          String?
+  Isopdipd                 Int?
+  Note                     String?   @db.Text
+  B_ID                     Int?
+  ListColorLineNo          String?
+  IsPrintNoSterile         Boolean?  @default(false)
+  IsPayToSend              Int?
+  IsTrackAuto              Boolean?  @default(false)
+  IsGroupPrintSticker      Boolean?  @default(false)
+  FileUpload               String?   @db.Text
+  IsUsageName              Boolean?  @default(false)
+  Typeitemcode             Int?
+  Picture3                 String?   @db.Text
+  Picture4                 String?   @db.Text
+  Picture5                 String?   @db.Text
+  IsFabric                 Boolean?  @default(false)
+  WashPriceId              Int?
+  SterilePriceId           Int?
+  ReProcessPrice           Float?
+  wash_price_id            Int?
+  sterile_price_id         Int?
+  reprocess_price          Float?
+  UserCreate               Int?      @default(0)
+  UserModify               Int?      @default(0)
+  ModiflyDate              DateTime? @default(now())
+  IsNumber                 Boolean?  @default(false)
+  SapCode                  String?
+  IsChangeUsageInSet       Boolean?  @default(false)
+  IsNH                     Int?
+  MaxInventory             Int?
+  procedureID              Int?
+  Description              String?   @db.Text
+  ReuseDetect              String?
+  stock_max                Int?
+  stock_min                Int?
+  stock_balance            Int?
+  warehouseID              Int?
+  fixcost                  Boolean?  @default(false)
+  main_max                 Int?
+  main_min                 Int?
+  item_status              Int?      @default(0)
+
+  // Relations
+  itemType                        ItemType?                        @relation(fields: [itemtypeID], references: [ID], onDelete: SetNull)
+  itemStocks                      ItemStock[]
+  itemSlotInCabinet               ItemSlotInCabinet[]
+  itemSlotInCabinetDetail         ItemSlotInCabinetDetail[]        @relation("DetailToItem")
+  unit                            Unit?                            @relation("ItemMainUnit", fields: [UnitID], references: [ID], onDelete: SetNull)
+  subUnit                         Unit?                            @relation("ItemSubUnit", fields: [SubUnitID], references: [ID], onDelete: SetNull)
+  itemDepartments                 ItemDepartments[]
+  departmentDispenseDocumentLines DepartmentDispenseDocumentLine[]
+  itemStorageLocations            ItemStorageLocation[]
+
+  @@index([itemtypeID])
+  @@index([SubUnitID], map: "idx_item_sub_unit_id")
+  @@map("item")
+}
+
+model ItemDepartments {
+  ID               Int       @id @default(autoincrement())
+  itemcode         String    @db.VarChar(25)
+  DeptID           Int?
+  IsCancel         Int?      @default(0)
+  AdminCheck       String?   @db.VarChar(50)
+  DateAdminCheck   DateTime? @db.DateTime(0)
+  UnAdminCheck     String?   @db.VarChar(50)
+  UnDateAdminCheck DateTime? @db.DateTime(0)
+  UsedCount        Int?      @default(0)
+  B_ID             Int?
+
+  // Relations
+  item       Item?       @relation(fields: [itemcode], references: [itemcode])
+  department Department? @relation(fields: [DeptID], references: [ID])
+
+  @@index([itemcode])
+  @@index([DeptID])
+  @@index([IsCancel])
+  @@map("itemdepartment")
+}
+
+/// แผนกย่อยภายใต้แผนกหลัก (เช่น emergency-opd, emergency-ipd) — `code` ไม่ซ้ำทั้งระบบ
+model MedicalSupplySubDepartment {
+  id            Int      @id @default(autoincrement())
+  department_id Int      @map("department_id")
+  code          String   @map("code") @db.VarChar(64)
+  name          String?  @map("name") @db.VarChar(255)
+  description   String?  @map("description") @db.Text
+  status        Boolean  @default(true) @map("status")
+  created_at    DateTime @default(dbgenerated("NOW()")) @map("created_at") @db.DateTime(3)
+  updated_at    DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+
+  department          Department           @relation(fields: [department_id], references: [ID], onDelete: Cascade)
+  medicalSupplyUsages MedicalSupplyUsage[]
+
+  @@unique([code])
+  @@index([department_id])
+  @@map("app_sub_departments")
+}
+
+// Medical Supplies Usage
+model MedicalSupplyUsage {
+  id                  Int      @id @default(autoincrement())
+  hospital            String?  @map("hospital") // VTN01
+  en                  String?  @default("") @map("en") // Episode Number (EZ5-000584)
+  patient_hn          String   @map("patient_hn") // HN Hospital Number (20-010334)
+  first_name          String?  @default("") @map("first_name") // ชื่อจริง
+  lastname            String?  @default("") @map("lastname") // นามสกุล
+  patient_name_th     String?  @map("patient_name_th")
+  patient_name_en     String?  @map("patient_name_en")
+  usage_datetime      String?  @map("usage_datetime")
+  sub_department_id   Int?     @map("sub_department_id")
+  purpose             String?  @map("purpose")
+  department_id       Int?     @map("department_id")
+  recorded_by_user_id String?  @map("recorded_by_user_id")
+  billing_status      String?  @map("billing_status")
+  billing_subtotal    Float?   @map("billing_subtotal")
+  billing_tax         Float?   @map("billing_tax")
+  billing_total       Float?   @map("billing_total")
+  billing_currency    String?  @default("THB") @map("billing_currency")
+  twu                 String?  @map("twu") // Patient Location when Ordered (แผนก/จุดที่ Print ตาม Location ที่ผู้ป่วยได้รับการ Key รายการ Order)
+  print_location      String?  @map("print_location") // Print Location when Ordered (Emergency)
+  print_date          String?  @map("print_date") // Print Date (14/11/2025)
+  time_print_date     String?  @map("time_print_date") // Time Print Date (14/11/2025 09:30:00)
+  update              String?  @map("update") // Print Date - วันที่ของการ Print แยกจากวันที่ Receipt /Invoice
+  created_at          DateTime @default(dbgenerated("NOW()")) @map("created_at") @db.DateTime(3)
+  updated_at          DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  supply_items  SupplyUsageItem[]
+  logs          MedicalSupplyUsageLog[]
+  subDepartment MedicalSupplySubDepartment? @relation(fields: [sub_department_id], references: [id], onDelete: SetNull)
+  department    Department?                 @relation("MedicalSupplyUsageMainDepartment", fields: [department_id], references: [ID], onDelete: SetNull)
+
+  @@index([patient_hn])
+  @@index([en])
+  @@index([usage_datetime])
+  @@index([sub_department_id])
+  @@index([department_id])
+  @@index([billing_status])
+  @@map("app_medical_supply_usages")
+}
+
+// Supply Usage Items (Order Items)
+model SupplyUsageItem {
+  id                      Int @id @default(autoincrement())
+  medical_supply_usage_id Int @map("medical_supply_usage_id")
+
+  // Order Item Details (New Format from API Spec)
+  order_item_code        String? @default("") @map("order_item_code") // ItemCode (S4214JELCO018)
+  order_item_description String? @default("") @map("order_item_description") // ItemDescription (JELCO IV NO,18)
+  assession_no           String? @default("") @map("assession_no") // Assession No. (17938884/109)
+  order_item_status      String? @default("") @map("order_item_status") // Order Item Status (Verified, Update, etc.)
+  qty                    Int?    @default(0) @map("qty") // Quantity
+  uom                    String? @default("") @map("uom") // Unit of Measure (Each)
+
+  // Legacy fields (for backward compatibility)
+  supply_code     String? @map("supply_code")
+  supply_name     String? @map("supply_name")
+  supply_category String? @map("supply_category")
+  unit            String? @map("unit")
+  quantity        Int?    @map("quantity")
+  unit_price      Float?  @map("unit_price")
+  total_price     Float?  @map("total_price")
+  expiry_date     String? @map("expiry_date")
+
+  // Quantity Management - แยกจำนวนอุปกรณ์ตามการใช้งาน
+  qty_used_with_patient   Int @default(0) @map("qty_used_with_patient") // จำนวนที่ใช้กับคนไข้
+  qty_returned_to_cabinet Int @default(0) @map("qty_returned_to_cabinet") // จำนวนที่คืนเข้าตู้แล้ว
+  // qty_pending = qty - qty_used_with_patient - qty_returned_to_cabinet (คำนวณได้)
+
+  // Status Management
+  item_status String @default("PENDING") @map("item_status") // PENDING, PARTIAL, COMPLETED
+
+  created_at DateTime @default(dbgenerated("NOW()")) @map("created_at") @db.DateTime(6)
+  updated_at DateTime @updatedAt @map("updated_at") @db.DateTime(6)
+
+  // Relations
+  usage MedicalSupplyUsage @relation(fields: [medical_supply_usage_id], references: [id], onDelete: Cascade)
+  // return_items SupplyItemReturnRecord[]
+
+  @@index([medical_supply_usage_id])
+  @@index([order_item_code])
+  @@index([assession_no])
+  @@index([supply_code])
+  @@index([item_status])
+  @@map("app_supply_usage_items")
+}
+
+// Supply Item Return Records - บันทึกรายการคืนอุปกรณ์แต่ละครั้ง
+model SupplyItemReturnRecord {
+  id Int @id @default(autoincrement())
+
+  itemCode String @map("item_code")
+  stock_id Int?   @map("stock_id") // optional: รายการเก่าอาจไม่มี; ใช้ร่วมกับ cabinet.stock_id เมื่อมี
+
+  // Return Details
+  qty_returned      Int      @map("qty_returned") // จำนวนที่คืนในครั้งนี้
+  return_reason     String   @map("return_reason") // OTHER, EXPIRED, CONTAMINATED, DAMAGED (ค่าเก่า UNWRAPPED_UNUSED อาจยังอยู่ในฐานข้อมูล)
+  return_datetime   DateTime @default(now()) @map("return_datetime")
+  return_by_user_id String   @map("return_by_user_id")
+  return_note       String?  @map("return_note") // หมายเหตุเพิ่มเติม
+
+  created_at DateTime @default(dbgenerated("NOW()")) @map("created_at")
+  updated_at DateTime @updatedAt @map("updated_at")
+
+  // Relation: ระบุว่าคืนมาจากตู้ไหน (ผ่าน stock_id = cabinet.stock_id)
+  cabinet cabinet? @relation(fields: [stock_id], references: [stock_id])
+
+  @@index([itemCode], map: "idx_return_itemCode")
+  @@index([stock_id])
+  @@map("app_supply_item_return_records")
+}
+
+// Medical Supplies Usage Logs
+model MedicalSupplyUsageLog {
+  id Int @id @default(autoincrement())
+
+  // Reference to the usage record (nullable for error logs)
+  usage_id Int? @map("usage_id")
+
+  /// HN (เลข HN ผู้ป่วย) — แยกคอลัมน์เพื่อค้น/รายงาน
+  patient_hn String? @map("patient_hn") @db.VarChar(64)
+
+  /// EN (Episode / เลขอีพีโซด)
+  en String? @map("en") @db.VarChar(64)
+
+  /// ประเภท log เช่น CREATE, UPDATE, หรือชื่อ action
+  log_type String? @map("log_type") @db.VarChar(64)
+
+  /// สถานะ เช่น SUCCESS, ERROR
+  log_status String? @map("log_status") @db.VarChar(32)
+
+  /// คำอธิบายภาษาไทยสำหรับผู้ใช้ (action JSON เก็บรายละเอียดเทคนิคเหมือนเดิม)
+  description String? @map("description") @db.VarChar(1024)
+
+  // Action data (JSON) - รายละเอียดเต็ม
+  action Json @map("action") @db.Json
+
+  created_at DateTime @default(dbgenerated("NOW()")) @map("created_at")
+
+  usage MedicalSupplyUsage? @relation(fields: [usage_id], references: [id], onDelete: Cascade)
+
+  @@index([usage_id])
+  @@index([created_at])
+  @@index([patient_hn])
+  @@index([en])
+  @@index([log_type])
+  @@index([log_status])
+  @@map("app_medical_supply_usages_logs")
+}
+
+// Item Stock (Inventory Management)
+model ItemStock {
+  RowID                 Int       @id @default(autoincrement()) @map("RowID")
+  CreateDate            DateTime? @default(now()) @map("CreateDate")
+  ItemCode              String?   @map("ItemCode") @db.VarChar(20)
+  UsageCode             String?   @map("UsageCode") @db.VarChar(20)
+  UsageCode2            String?   @map("UsageCode2") @db.VarChar(20)
+  RfidCode              String?   @map("RfidCode") @db.VarChar(255)
+  IsStatus              Int?      @default(0) @map("IsStatus")
+  IsNew                 Boolean?  @default(true) @map("IsNew")
+  IsNewUsage            Boolean?  @default(true) @map("IsNewUsage")
+  LastSendDeptDate      DateTime? @map("LastSendDeptDate")
+  PackDate              DateTime? @map("PackDate")
+  ExpireDate            DateTime? @map("ExpireDate")
+  DepID                 Int?      @default(0) @map("DepID")
+  PackingMatID          Int?      @map("PackingMatID")
+  Qty                   Int?      @default(0) @map("Qty")
+  UsageCount            Int?      @default(0) @map("UsageCount")
+  IsPay                 Int?      @default(0) @map("IsPay")
+  LastPayDeptDate       DateTime? @map("LastPayDeptDate")
+  IsDispatch            Boolean?  @default(false) @map("IsDispatch")
+  LastReceiveDeptDate   DateTime? @map("LastReceiveDeptDate")
+  IsTag                 Boolean?  @default(false) @map("IsTag")
+  IsNoStep12            Boolean?  @default(false) @map("IsNoStep12")
+  IsPrint               Boolean?  @default(false) @map("IsPrint")
+  IsCancel              Boolean?  @default(false) @map("IsCancel")
+  B_ID                  Int?      @default(0) @map("B_ID")
+  ImportOccurrenceID    Int?      @default(0) @map("ImportOccurrenceID")
+  LastSterileDetailID   Int?      @map("LastSterileDetailID")
+  LastReceiveInDeptDate DateTime? @map("LastReceiveInDeptDate")
+  LastDispatchModify    DateTime? @map("LastDispatchModify")
+  IsHN                  Int?      @default(0) @map("IsHN")
+  IsStock               Boolean?  @default(true) @map("IsStock")
+  IsBorrow              Boolean?  @default(false) @map("IsBorrow")
+  PreviousStatus        Int?      @default(0) @map("PreviousStatus")
+  IsWeb                 Int?      @default(0) @map("IsWeb")
+  IsRemarkExpress       Int?      @default(0) @map("IsRemarkExpress")
+  RemarkExpress         String?   @map("RemarkExpress") @db.VarChar(255)
+  IsReuse               Int?      @default(1) @map("IsReuse")
+  IsTrade               Boolean?  @default(false) @map("IsTrade")
+  IsDeposit             Int?      @default(0) @map("IsDeposit")
+  TransactionCreate     Int?      @map("TransactionCreate")
+  DeptID                Int?      @default(0) @map("DeptID")
+  isPairing             Boolean?  @default(false) @map("isPairing")
+  PreviousIsPay         Boolean?  @default(false) @map("PreviousIsPay")
+  IsREUsageCount        Boolean?  @default(false) @map("IsREUsageCount")
+  IsCancelByLimit       Boolean?  @default(false) @map("IsCancelByLimit")
+  UsageName             String?   @map("UsageName") @db.VarChar(255)
+  ProductSerial         String?   @map("ProductSerial") @db.VarChar(25)
+  StockID               Int?      @map("StockID")
+  /**
+   * Legacy DB เก็บเป็นตัวเลข (มักเป็น 0 เมื่อไม่ผูก HN ผู้ป่วย) — ไม่ใช่ VarChar
+   */
+  HNCode                Int?      @default(0) @map("HNCode")
+  CabinetUserID         Int?      @map("CabinetUserID")
+  LastCabinetModify     DateTime? @map("LastCabinetModify")
+  InsertRfidDocNo       String?   @map("InsertRfidDocNo") @db.VarChar(20)
+  Istatus_rfid          Int?      @map("Istatus_rfid") // 1=เดิม 2=เบิก 3=ส่ง
+  ShiptoDate            DateTime? @map("ShiptoDate")
+  ReturnDate            DateTime? @map("ReturnDate")
+  InsertDate            DateTime? @map("InsertDate")
+  IsDeproom             String?   @map("IsDeproom") @db.VarChar(5)
+  IsClaim               Int?      @map("IsClaim")
+  IsCross               Int?      @map("IsCross")
+  departmentroomId      Int?      @map("departmentroomId")
+  IsDamage              Int?      @map("IsDamage")
+  lotNo                 String?   @map("lotNo") @db.VarChar(50)
+  expDate               DateTime? @map("expDate")
+  IsTracking            Boolean?  @default(false) @map("IsTracking")
+  remarkTracking        String?   @map("remarkTracking") @db.VarChar(255)
+  return_userID         Int?      @map("return_userID")
+  IsSell                Int?      @default(0) @map("IsSell")
+
+  // Relations
+  item    Item?    @relation(fields: [ItemCode], references: [itemcode], onDelete: SetNull)
+  cabinet cabinet? @relation(fields: [StockID], references: [stock_id])
+
+  @@map("itemstock")
+}
+
+// Item Type (Type of Medical Supplies)
+model ItemType {
+  ID       Int      @id @default(autoincrement()) @map("ID")
+  TypeName String?  @map("TypeName") @db.VarChar(50)
+  IsCancel Boolean? @default(false) @map("IsCancel")
+  B_ID     Int?     @map("B_ID")
+
+  // Relations
+  items Item[]
+
+  @@map("itemtype")
+}
+
+// Department
+model Department {
+  ID                Int     @id @default(autoincrement()) @map("ID")
+  DepName           String? @map("DepName") @db.VarChar(200)
+  DepName2          String? @map("DepName2") @db.VarChar(200)
+  IsCancel          Int?    @default(0) @map("IsCancel")
+  DivID             Int?    @map("DivID")
+  PriorityNo        Int?    @map("PriorityNo")
+  IsRepeat          Int?    @default(0) @map("IsRepeat")
+  IsAutomaticPayout Int?    @default(0) @map("IsAutomaticPayout")
+  Is_Bnew           Int?    @default(0) @map("Is_Bnew")
+  Floor             String? @map("Floor") @db.VarChar(50)
+  package           Int?    @map("package")
+  Tel               String? @map("Tel") @db.VarChar(50)
+  IsReceiveManual   Int?    @default(0) @map("IsReceiveManual")
+  IsNoCopyPayout    Int?    @default(0) @map("IsNoCopyPayout")
+  sort              Int?    @map("sort")
+  B_IDimed          Int?    @map("B_IDimed")
+  DepNameimed       String? @map("DepNameimed") @db.VarChar(200)
+  LendingLimitDay   Int?    @map("LendingLimitDay")
+  IsMainDep         Int?    @default(0) @map("IsMainDep")
+  ItemPrefix        String? @map("ItemPrefix") @db.VarChar(20)
+  B_ID              Int?    @map("B_ID")
+  IsAutoStock       Int?    @default(0) @map("IsAutoStock")
+  IsGroupHoldFromHN Int?    @default(0) @map("IsGroupHoldFromHN")
+  ExpiringSoonDay   Int?    @map("ExpiringSoonDay")
+  IsToStock         Int?    @default(0) @map("IsToStock")
+  IsLaundy          Int?    @default(0) @map("IsLaundy")
+  IsLoaner          Int?    @default(0) @map("IsLoaner")
+  IsStock           Int?    @default(0) @map("IsStock")
+  RefDepID          String? @map("RefDepID") @db.VarChar(50)
+
+  // Relations
+  cabinetDepartments          cabinetDepartment[]
+  medicalSupplySubDepartments MedicalSupplySubDepartment[]
+  medicalSupplyUsages         MedicalSupplyUsage[]         @relation("MedicalSupplyUsageMainDepartment")
+  users                       User[]
+  itemSlotBorrowDetails       ItemSlotInCabinetDetail[]    @relation("ItemSlotDetailBorrowDepartment")
+  staffPermissionDepartments  StaffPermissionDepartment[]
+  itemDepartments             ItemDepartments[]
+  departmentDispenseDocuments DepartmentDispenseDocument[]
+
+  @@map("department")
+}
+
+model cabinet {
+  id             Int      @id @default(autoincrement())
+  cabinet_name   String?  @map("cabinet_name") @db.VarChar(255)
+  cabinet_code   String?  @map("cabinet_code") @db.VarChar(255)
+  cabinet_type   String?  @map("cabinet_type") @db.VarChar(255)
+  cabinet_status String?  @default("ACTIVE") @map("cabinet_status") @db.VarChar(255)
+  stock_id       Int?     @unique() @map("stock_id")
+  created_at     DateTime @default(dbgenerated("NOW()")) @map("created_at")
+  updated_at     DateTime @updatedAt @map("updated_at")
+
+  cabinetDepartments      cabinetDepartment[]
+  itemStocks              ItemStock[]
+  supplyItemReturnRecords SupplyItemReturnRecord[]
+  cabinetItemSettings     CabinetItemSetting[]
+  itemSlotInCabinet       ItemSlotInCabinet[]
+  cabinetSlotLocations    CabinetSlotLocation[]
+
+  @@map("app_cabinets")
+}
+
+// Min/Max ต่อตู้ — override ของ item.stock_min/stock_max เมื่อมีแถวสำหรับ (cabinet_id, item_code)
+model CabinetItemSetting {
+  id         Int      @id @default(autoincrement())
+  cabinet_id Int      @map("cabinet_id")
+  item_code  String   @map("item_code") @db.VarChar(25)
+  stock_min  Int?     @map("stock_min")
+  stock_max  Int?     @map("stock_max")
+  created_at DateTime @default(dbgenerated("NOW()")) @map("created_at")
+  updated_at DateTime @updatedAt @map("updated_at")
+
+  cabinet cabinet @relation(fields: [cabinet_id], references: [id], onDelete: Cascade)
+
+  @@unique([cabinet_id, item_code])
+  @@index([cabinet_id])
+  @@index([item_code])
+  @@map("app_cabinet_item_settings")
+}
+
+model cabinetDepartment {
+  id            Int     @id @default(autoincrement())
+  cabinet_id    Int?    @map("cabinet_id")
+  department_id Int?    @map("department_id")
+  status        String  @default("ACTIVE") @map("status") // ACTIVE, INACTIVE
+  description   String? @map("description") @db.Text
+
+  created_at DateTime @default(dbgenerated("NOW()")) @map("created_at")
+  updated_at DateTime @updatedAt @map("updated_at")
+
+  cabinet    cabinet?    @relation(fields: [cabinet_id], references: [id])
+  department Department? @relation(fields: [department_id], references: [ID])
+
+  @@map("app_cabinet_departments")
+}
+
+model ItemSlotInCabinet {
+  id       Int    @id @default(autoincrement())
+  itemcode String @unique() @map("itemcode") @db.VarChar(25)
+  StockID  Int    @map("StockID")
+  SlotNo   Int    @map("SlotNo")
+  Sensor   Int    @map("Sensor")
+  Qty      Int    @map("Qty")
+
+  // Relations
+  itemSlotInCabinetDetail ItemSlotInCabinetDetail[] @relation("DetailToSlot")
+  cabinet                 cabinet?                  @relation(fields: [StockID], references: [stock_id])
+  item                    Item?                     @relation(fields: [itemcode], references: [itemcode])
+
+  @@map("itemslotincabinet")
+}
+
+model ItemSlotInCabinetDetail {
+  id         Int      @id @default(autoincrement())
+  Sel        Int      @map("Sel")
+  itemcode   String   @map("itemcode") @db.VarChar(25)
+  HnCode     String   @map("HnCode") @db.VarChar(25)
+  StockID    Int      @map("StockID")
+  SlotNo     Int      @map("SlotNo")
+  Sensor     Int      @map("Sensor")
+  Qty        Int      @map("Qty")
+  ModifyDate DateTime @map("ModifyDate")
+  UserID     Int      @map("UserID")
+  IsDeproom  String   @map("IsDeproom") @db.VarChar(25)
+  Sign       String   @map("Sign")
+  IsBorrow   Boolean? @default(false) @map("IsBorrow")
+  /**
+   * แผนกที่ยืม — เชื่อม department.ID
+   */
+  DepID      Int?     @map("DepID")
+
+  // Relations
+  itemSlotInCabinet ItemSlotInCabinet @relation("DetailToSlot", fields: [itemcode], references: [itemcode], map: "detail_to_slot_fkey")
+  item              Item?             @relation("DetailToItem", fields: [itemcode], references: [itemcode], map: "detail_to_item_fkey")
+  userCabinet       UserCabinet?      @relation(fields: [UserID], references: [cabinet_id])
+  borrowDepartment  Department?       @relation("ItemSlotDetailBorrowDepartment", fields: [DepID], references: [ID], onDelete: SetNull)
+
+  @@map("itemslotincabinet_detail")
+}
+
+/// ตำแหน่ง Row/Rack/Shelf ต่อช่องในตู้ — อ้างอิง StockID + SlotNo + Sensor จาก itemslotincabinet / itemslotincabinet_detail
+model CabinetSlotLocation {
+  id             Int      @id @default(autoincrement())
+  stock_id       Int      @map("stock_id")
+  slot_no        Int      @map("slot_no")
+  sensor         Int      @default(0) @map("sensor")
+  location_row   String?  @map("location_row") @db.VarChar(50)
+  location_rack  String?  @map("location_rack") @db.VarChar(50)
+  location_shelf String?  @map("location_shelf") @db.VarChar(50)
+  created_at     DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updated_at     DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+
+  cabinet cabinet? @relation(fields: [stock_id], references: [stock_id], onDelete: Cascade)
+
+  @@unique([stock_id, slot_no, sensor], map: "uq_cabinet_slot_location")
+  @@index([stock_id])
+  @@map("app_cabinet_slot_locations")
+}
+
+/// ตำแหน่งจัดเก็บอุปกรณ์ — 1 item มีได้หลายตำแหน่ง; unique ที่ itemcode+Row+Rack+Shelf
+model ItemStorageLocation {
+  id             Int      @id @default(autoincrement())
+  itemcode       String   @map("itemcode") @db.VarChar(25)
+  location_row   String   @default("") @map("location_row") @db.VarChar(50)
+  location_rack  String   @default("") @map("location_rack") @db.VarChar(50)
+  location_shelf String   @default("") @map("location_shelf") @db.VarChar(50)
+  qty            Int?     @map("qty")
+  created_at     DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updated_at     DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+
+  item Item? @relation(fields: [itemcode], references: [itemcode], onDelete: Cascade)
+
+  @@unique([itemcode, location_row, location_rack, location_shelf], map: "uq_item_storage_location")
+  @@index([itemcode])
+  @@map("app_item_storage_locations")
+}
+
+// user_cabinet.cabinet_id = app_cabinets.stock_id
+model UserCabinet {
+  id         Int @id @default(autoincrement())
+  cabinet_id Int @unique
+  user_id    Int @map("user_id")
+
+  legacyUser              LegacyUsers               @relation(fields: [user_id], references: [id])
+  itemSlotInCabinetDetail ItemSlotInCabinetDetail[]
+
+  @@map("user_cabinet")
+}
+
+// users (legacy) — ตารางเดิมของตู้ SmartCabinet / user_cabinet
+model LegacyUsers {
+  id                 Int       @id @default(autoincrement()) @map("ID")
+  EmpCode            String?   @unique @map("EmpCode") @db.VarChar(20)
+  UserName           String?   @map("UserName") @db.VarChar(20)
+  Password           String?   @map("Password") @db.VarChar(20)
+  IsCancel           Int?      @default(0) @map("IsCancel")
+  Lang               String?   @map("Lang") @db.VarChar(2)
+  images             String?   @map("images") @db.VarChar(100)
+  DeptID             Int?      @default(20) @map("DeptID")
+  B_ID               Int?      @map("B_ID")
+  GroupType          Int?      @default(1) @map("GroupType")
+  IsChange           Int?      @default(0) @map("IsChange")
+  LastUpdatePassword DateTime? @map("LastUpdatePassword")
+  PasswordExpireDate DateTime? @map("PasswordExpireDate")
+  isCssdCheckStock   Boolean?  @map("isCssdCheckStock") @db.Bit(1)
+  RFID_Card          String?   @map("RFID_Card") @db.VarChar(50)
+  permission         Int?      @map("permission")
+  FingerID           Int?      @map("FingerID")
+  display            String?   @map("display") @db.VarChar(2)
+  font               String?   @map("font") @db.VarChar(2)
+  time_out           Int?      @map("time_out")
+  IsAdmin            Int?      @default(0) @map("IsAdmin")
+  IsFingerPrint1     Int?      @default(0) @map("IsFingerPrint1")
+  IsFingerPrint2     Int?      @default(0) @map("IsFingerPrint2")
+
+  userCabinet UserCabinet[]
+  employee    Employee?     @relation(fields: [EmpCode], references: [EmpCode])
+
+  @@map("users")
+}
+
+model Employee {
+  EmpCode   String  @id @map("EmpCode") @db.VarChar(20)
+  FirstName String? @map("FirstName") @db.VarChar(100)
+  LastName  String? @map("LastName") @db.VarChar(100)
+  IsUser    Int?    @default(1) @map("IsUser")
+
+  legacyUsers LegacyUsers[]
+  users       User[]
+
+  @@map("employee")
+}
+
+/// ไฟล์รายงานสต๊อกตู้ที่สำรองรายวัน (Excel/PDF) — เก็บ path บนดิสก์ + metadata
+model DailyCabinetStockReportArchive {
+  id          Int      @id @default(autoincrement())
+  report_date String   @map("report_date") @db.VarChar(10)
+  format      String   @map("format") @db.VarChar(16)
+  filter_key  String   @default("ALL") @map("filter_key") @db.VarChar(64)
+  file_path   String   @map("file_path") @db.VarChar(512)
+  file_size   Int?     @map("file_size")
+  created_at  DateTime @default(now()) @map("created_at")
+
+  @@unique([report_date, format, filter_key], map: "uq_daily_cab_stock_archive")
+  @@index([report_date(sort: Desc)], map: "idx_daily_cab_stock_report_date")
+  @@map("app_daily_cabinet_stock_report_archives")
+}
+
+/// เอกสารควบคุมการเบิกอุปกรณ์ให้หน่วยงาน
+model DepartmentDispenseDocument {
+  id                 Int      @id @default(autoincrement())
+  doc_no             String   @unique @map("doc_no") @db.VarChar(32)
+  department_id      Int      @map("department_id")
+  status             String   @default("CONFIRMED") @map("status") @db.VarChar(20)
+  remark             String?  @map("remark") @db.Text
+  created_by_user_id Int?     @map("created_by_user_id")
+  created_at         DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updated_at         DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+
+  department Department                       @relation(fields: [department_id], references: [ID])
+  createdBy  User?                            @relation(fields: [created_by_user_id], references: [id], onDelete: SetNull)
+  lines      DepartmentDispenseDocumentLine[]
+
+  @@index([department_id])
+  @@index([created_at(sort: Desc)])
+  @@map("app_department_dispense_documents")
+}
+
+model DepartmentDispenseDocumentLine {
+  id             Int     @id @default(autoincrement())
+  document_id    Int     @map("document_id")
+  line_order     Int     @default(0) @map("line_order")
+  itemcode       String  @map("itemcode") @db.VarChar(25)
+  item_name      String? @map("item_name") @db.VarChar(255)
+  qty            Int     @default(1) @map("qty")
+  location_row   String? @map("location_row") @db.VarChar(50)
+  location_rack  String? @map("location_rack") @db.VarChar(50)
+  location_shelf String? @map("location_shelf") @db.VarChar(50)
+  store_ref      String? @map("store_ref") @db.VarChar(255)
+  slot_no        Int?    @map("slot_no")
+  sensor         Int?    @map("sensor")
+
+  document DepartmentDispenseDocument @relation(fields: [document_id], references: [id], onDelete: Cascade)
+  item     Item?                      @relation(fields: [itemcode], references: [itemcode], onDelete: Restrict)
+
+  @@index([document_id])
+  @@index([itemcode])
+  @@map("app_department_dispense_document_lines")
+}
+
+/// หน่วยนับ (เช่น ชิ้น, กล่อง) — ตาราง `unit`
+model Unit {
+  ID       Int      @id @default(autoincrement()) @map("ID")
+  UnitName String?  @map("UnitName") @db.VarChar(50)
+  IsCancel Boolean? @default(false) @map("IsCancel") @db.Bit(1)
+  B_ID     Int?     @map("B_ID")
+
+  // Relations
+  items        Item[] @relation("ItemMainUnit")
+  itemsSubUnit Item[] @relation("ItemSubUnit")
+
+  @@map("units")
+}

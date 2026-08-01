@@ -1,0 +1,92 @@
+# ================================
+# Frontend (Next.js) - Kubernetes Deployment & Service — Smart Cabinet CU
+# ================================
+# ตัวแปร env ตรงกับ frontend/.env.example (NEXT_PUBLIC_BASE_PATH=/smart-cabinet-cu ฯลฯ)
+# ก่อน deploy: build image แล้ว import เข้า K3s
+#   docker build -f docker/Dockerfile --build-arg NEXT_PUBLIC_API_URL=... --build-arg NEXT_PUBLIC_BASE_PATH=/smart-cabinet-cu -t frontend-smart-cabinet:latest .
+#   docker save frontend-smart-cabinet:latest | sudo k3s ctr images import -
+#   kubectl apply -f k8s/frontend-deployment.yaml
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: pose-microservices
+  labels:
+    app: frontend
+    tier: presentation
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+        tier: presentation
+    spec:
+      containers:
+        - name: frontend
+          image: frontend-smart-cabinet:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 3100
+              name: http
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: PORT
+              value: "3100"
+            # ตรงกับ .env.example — แก้ให้ตรงกับสภาพแวดล้อม (หรือใช้ ConfigMap/Secret)
+            - name: NEXT_PUBLIC_API_URL
+              value: "http://<BACKEND_HOST>:30080/smart-cabinet-cu/api/v1"
+            - name: NEXT_PUBLIC_BASE_PATH
+              value: "/smart-cabinet-cu"
+            - name: NEXTAUTH_SECRET
+              value: "fKwpUMTYNf8bJZ8hJqDwy6KeXfJgkBce9H9gm48VzvU="
+            - name: NEXTAUTH_URL
+              value: "http://<FRONTEND_PUBLIC_URL>:30100/smart-cabinet-cu"
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "100m"
+            limits:
+              memory: "128Mi"
+              cpu: "400m"
+          livenessProbe:
+            httpGet:
+              path: /smart-cabinet-cu
+              port: 3100
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /smart-cabinet-cu
+              port: 3100
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+  namespace: pose-microservices
+  labels:
+    app: frontend
+spec:
+  type: LoadBalancer
+  selector:
+    app: frontend
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 3100
+      nodePort: 30100
+  sessionAffinity: ClientIP
