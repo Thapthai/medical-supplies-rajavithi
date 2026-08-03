@@ -30,6 +30,7 @@ import {
   PAGE_SIZE,
 } from '@/app/staff/management/print-sticker/constants';
 import type { SelectedLine } from '@/app/staff/management/print-sticker/types';
+import { clampCopies } from '@/app/staff/management/print-sticker/utils';
 import { readStaffRoleDefaultDepartmentIdFromStorage } from '@/lib/staffDepartmentScope';
 
 type PreparedStockRow = { RowID: number; ItemCode?: string | null; RfidCode?: string | null };
