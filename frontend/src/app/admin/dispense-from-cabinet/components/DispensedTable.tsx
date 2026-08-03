@@ -11,7 +11,6 @@ import QtyWithMainUnit from '@/components/QtyWithMainUnit';
 import { formatUtcDateTime } from '@/lib/formatThaiDateTime';
 import {
   buildDispensedGroups,
-  DISPENSED_GROUP_TIME_TOLERANCE_SEC,
 } from '@/lib/dispenseFromCabinet/buildDispensedGroups';
 
 export type { DispensedGroup } from '@/lib/dispenseFromCabinet/buildDispensedGroups';
@@ -102,7 +101,7 @@ export default function DispensedTable({
           <CardTitle>รายการเบิกอุปกรณ์จากตู้</CardTitle>
           <CardDescription>
             {items.length > 0
-              ? `แสดง ${paginatedGroups.length} กลุ่มในหน้านี้ (สูงสุด ${groupsPerPage} กลุ่มต่อหน้า) · รวม ${totalGroups} กลุ่ม จาก ${totalRawItems} รายการดิบ (รวม ${totalDispensedQty.toLocaleString()} ชิ้น) · จัดกลุ่มตามรหัสอุปกรณ์และเวลาที่เบิก ±${DISPENSED_GROUP_TIME_TOLERANCE_SEC} วินาที`
+              ? `แสดง ${paginatedGroups.length} กลุ่มในหน้านี้ (สูงสุด ${groupsPerPage} กลุ่มต่อหน้า) · รวม ${totalGroups} กลุ่ม จาก ${totalRawItems} รายการดิบ (รวม ${totalDispensedQty.toLocaleString()} ชิ้น) · จัดกลุ่มตามรหัสอุปกรณ์`
               : 'รายการอุปกรณ์ทั้งหมดที่เบิกจากตู้ SmartCabinet'}
             {(searchItemCode || itemTypeFilter !== 'all') && items.length > 0 && ' (กรองแล้ว)'}
           </CardDescription>

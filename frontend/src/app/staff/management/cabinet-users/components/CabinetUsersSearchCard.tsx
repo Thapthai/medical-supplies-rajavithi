@@ -9,9 +9,13 @@ import { Input } from '@/components/ui/input';
 import SearchableSelect from '@/app/staff/management/cabinet-departments/components/SearchableSelect';
 import { staffCabinetDepartmentApi } from '@/lib/staffApi/cabinetApi';
 import {
-  clampDepartmentIdString,
   fetchStaffDepartmentsForFilter,
   getStaffAllowedDepartmentIds,
+  getStaffRoleDefaultCabinetId,
+  getStaffRoleDefaultDepartmentId,
+  pickDefaultCabinetId,
+  resolveStaffInitialDepartmentId,
+  sortCabinetsByName,
 } from '@/lib/staffDepartmentScope';
 import { cn } from '@/lib/utils';
 
@@ -75,6 +79,11 @@ export function CabinetUsersSearchCard({
   const [loadingCabinets, setLoadingCabinets] = useState(false);
   const allowedDepartmentIdsRef = useRef<number[] | null | undefined>(undefined);
   const initialSearchDoneRef = useRef(false);
+  const autoCabinetForDeptRef = useRef('');
+  const [roleDefaultDeptId, setRoleDefaultDeptId] = useState('');
+  const [roleDefaultReady, setRoleDefaultReady] = useState(false);
+  /** ตู้ Cabinet เริ่มต้นจาก Role via GET /staff/me/departments */
+  const [roleDefaultCabinetId, setRoleDefaultCabinetId] = useState('');
 
   const [formFilters, setFormFilters] = useState<CabinetUsersSearchFilters>({
     keyword: '',
@@ -109,18 +118,18 @@ export function CabinetUsersSearchCard({
     }
   }, []);
 
-  const resolveCabinets = useCallback(async (departmentIdStr: string, keyword?: string) => {
+  const resolveCabinets = useCallback(async (departmentIdStr: string, keyword?: string): Promise<Cabinet[]> => {
     const trimmed = departmentIdStr?.trim() ?? '';
     if (!trimmed) {
       setCabinets([]);
-      return;
+      return [];
     }
     try {
       setLoadingCabinets(true);
       const deptId = parseInt(trimmed, 10);
       if (Number.isNaN(deptId)) {
         setCabinets([]);
-        return;
+        return [];
       }
       const response = await staffCabinetDepartmentApi.getAll({
         departmentId: deptId,
@@ -137,17 +146,61 @@ export function CabinetUsersSearchCard({
               uniqueCabinets.set(mapped.id, mapped);
             }
           });
-        setCabinets(Array.from(uniqueCabinets.values()));
-      } else {
-        setCabinets([]);
+        const next = sortCabinetsByName(Array.from(uniqueCabinets.values()));
+        setCabinets(next);
+        return next;
       }
+      setCabinets([]);
+      return [];
     } catch (error) {
       console.error('Failed to load cabinets:', error);
       setCabinets([]);
+      return [];
     } finally {
       setLoadingCabinets(false);
     }
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [fromApi, cabinetFromApi] = await Promise.all([
+        getStaffRoleDefaultDepartmentId(),
+        getStaffRoleDefaultCabinetId(),
+      ]);
+      if (cancelled) return;
+      setRoleDefaultDeptId(fromApi);
+      setRoleDefaultCabinetId(cabinetFromApi);
+      setRoleDefaultReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (loadingCabinets) return;
+    const deptId = formFilters.departmentId.trim();
+    if (!deptId) {
+      autoCabinetForDeptRef.current = '';
+      return;
+    }
+
+    const current = formFilters.cabinetId.trim();
+    const currentOk = current !== '' && cabinets.some((c) => String(c.id) === current);
+    if (currentOk) {
+      autoCabinetForDeptRef.current = deptId;
+      return;
+    }
+    if (cabinets.length === 0) return;
+    if (autoCabinetForDeptRef.current === deptId && current === '') return;
+
+    const defaultCabinetId = pickDefaultCabinetId(cabinets, roleDefaultCabinetId);
+    autoCabinetForDeptRef.current = deptId;
+    setFormFilters((prev) =>
+      prev.cabinetId === defaultCabinetId ? prev : { ...prev, cabinetId: defaultCabinetId },
+    );
+  }, [cabinets, loadingCabinets, formFilters.departmentId, formFilters.cabinetId, roleDefaultCabinetId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -166,20 +219,33 @@ export function CabinetUsersSearchCard({
         if (cancelled) return;
         setDepartments(list);
 
-        let nextDept = clampDepartmentIdString('', allowed, '');
-        if (!nextDept && list.length === 1) {
-          nextDept = String(list[0].ID);
+        if (!roleDefaultReady) return;
+
+        const nextDept = resolveStaffInitialDepartmentId({
+          roleDefaultDeptId: roleDefaultDeptId.trim(),
+          allowed,
+          departments: list,
+        });
+
+        if (nextDept && formFilters.departmentId.trim() !== nextDept) {
+          setFormFilters((prev) => ({ ...prev, departmentId: nextDept, cabinetId: '' }));
+          return;
         }
+
+        if (nextDept && cabinets.length === 0) return;
+
+        const cabinetId = nextDept ? pickDefaultCabinetId(cabinets, roleDefaultCabinetId) : '';
 
         const nextFilters: CabinetUsersSearchFilters = {
           keyword: '',
           departmentId: nextDept,
-          cabinetId: '',
+          cabinetId,
         };
         setFormFilters(nextFilters);
 
         if (nextDept && !initialSearchDoneRef.current) {
           initialSearchDoneRef.current = true;
+          autoCabinetForDeptRef.current = nextDept;
           setAppliedFilters(nextFilters);
           onSearch(nextFilters);
         }
@@ -192,7 +258,7 @@ export function CabinetUsersSearchCard({
     return () => {
       cancelled = true;
     };
-  }, [onSearch]);
+  }, [onSearch, roleDefaultReady, roleDefaultDeptId, roleDefaultCabinetId, cabinets, formFilters.departmentId]);
 
   useEffect(() => {
     void resolveCabinets(formFilters.departmentId);
@@ -229,22 +295,33 @@ export function CabinetUsersSearchCard({
   };
 
   const handleReset = () => {
-    const allowed = allowedDepartmentIdsRef.current;
-    let defaultDept = clampDepartmentIdString('', allowed, '');
-    if (!defaultDept && departments.length === 1) {
-      defaultDept = String(departments[0].ID);
-    }
-    const defaultFilters: CabinetUsersSearchFilters = {
-      keyword: '',
-      departmentId: defaultDept,
-      cabinetId: '',
-    };
-    setFormFilters(defaultFilters);
-    setAppliedFilters(defaultFilters);
-    onReset?.();
-    if (defaultDept) {
-      onSearch(defaultFilters);
-    }
+    void (async () => {
+      const allowed = allowedDepartmentIdsRef.current;
+      const defaultDept = resolveStaffInitialDepartmentId({
+        roleDefaultDeptId: roleDefaultDeptId.trim(),
+        allowed,
+        departments,
+      });
+      let cabinetId = '';
+      if (defaultDept) {
+        const list = await resolveCabinets(defaultDept);
+        cabinetId = pickDefaultCabinetId(list, roleDefaultCabinetId);
+        autoCabinetForDeptRef.current = defaultDept;
+      } else {
+        autoCabinetForDeptRef.current = '';
+      }
+      const defaultFilters: CabinetUsersSearchFilters = {
+        keyword: '',
+        departmentId: defaultDept,
+        cabinetId,
+      };
+      setFormFilters(defaultFilters);
+      setAppliedFilters(defaultFilters);
+      onReset?.();
+      if (defaultDept) {
+        onSearch(defaultFilters);
+      }
+    })();
   };
 
   const hasActiveFilters =

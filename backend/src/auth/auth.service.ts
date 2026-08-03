@@ -71,7 +71,7 @@ export class AuthService {
         lname,
         client_id,
         client_secret: client_secret_hash,
-        is_admin: false,
+        is_admin: registerDto.is_admin === true,
       },
     });
     const dn = this.displayName(user);
@@ -107,7 +107,7 @@ export class AuthService {
   async login(loginDto: LoginDto) {
     const user = await this.prisma.user.findUnique({
       where: { email: loginDto.email },
-      include: { role: { select: { code: true } } },
+      include: { role: { select: { code: true, default_department_id: true, default_cabinet_id: true } } },
     });
     if (!user) return { success: false, message: 'Invalid credentials' };
     if (!user.is_active) return { success: false, message: 'Account is deactivated' };
@@ -163,6 +163,8 @@ export class AuthService {
           role_id: user.role_id,
           role: user.role?.code ?? null,
           department_id: user.department_id,
+          default_department_id: user.role?.default_department_id ?? null,
+          default_cabinet_id: user.role?.default_cabinet_id ?? null,
           client_id: user.client_id,
           two_factor_enabled: user.two_factor_enabled,
           preferred_auth_method: user.preferred_auth_method,
@@ -191,7 +193,7 @@ export class AuthService {
           two_factor_enabled: true,
           preferred_auth_method: true,
           password: true,
-          role: { select: { code: true } },
+          role: { select: { code: true, default_department_id: true, default_cabinet_id: true } },
         },
       });
       if (!user || !user.is_active) return { success: false, message: 'User not found or inactive' };
@@ -209,6 +211,8 @@ export class AuthService {
             role_id: user.role_id,
             role: user.role?.code ?? null,
             department_id: user.department_id,
+            default_department_id: user.role?.default_department_id ?? null,
+            default_cabinet_id: user.role?.default_cabinet_id ?? null,
             client_id: user.client_id,
             two_factor_enabled: user.two_factor_enabled,
             preferred_auth_method: user.preferred_auth_method,

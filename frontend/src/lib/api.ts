@@ -31,6 +31,7 @@ function staffPortalApiPath(url: string | undefined): boolean {
   if (!url) return false;
   if (url.startsWith('/staff-users')) return false;
   if (url.startsWith('/sticker-print')) return true;
+  if (url.startsWith('/department-dispense')) return true;
   return url.startsWith('/staff/') || url === '/staff';
 }
 
@@ -1673,7 +1674,12 @@ export const staffUserApi = {
     return response.data;
   },
 
-  getAllStaffUsers: async (params?: { page?: number; limit?: number; keyword?: string }): Promise<ApiResponse<any[]>> => {
+  getAllStaffUsers: async (params?: {
+    page?: number;
+    limit?: number;
+    keyword?: string;
+    role_id?: number;
+  }): Promise<ApiResponse<any[]>> => {
     const response = await api.get('/staff-users', { params: params ?? {} });
     return response.data;
   },
@@ -1841,6 +1847,8 @@ export const staffRoleApi = {
     name: string;
     description?: string;
     is_active?: boolean;
+    default_department_id?: number | null;
+    default_cabinet_id?: number | null;
   }): Promise<ApiResponse<any>> => {
     const response = await api.post('/staff-roles', data);
     return response.data;
@@ -1852,6 +1860,8 @@ export const staffRoleApi = {
       name?: string;
       description?: string;
       is_active?: boolean;
+      default_department_id?: number | null;
+      default_cabinet_id?: number | null;
     },
   ): Promise<ApiResponse<any>> => {
     const response = await api.put(`/staff-roles/${id}`, data);

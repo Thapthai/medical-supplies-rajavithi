@@ -12,6 +12,10 @@ type MeScopeCache = {
   unrestricted: boolean;
   allowedIds: number[] | null;
   departments: StaffMeDepartmentRow[];
+  defaultDepartmentId: number | null;
+  defaultDepartmentName: string | null;
+  defaultCabinetId: number | null;
+  defaultCabinetName: string | null;
 };
 
 let meScopeCache: MeScopeCache | null = null;
@@ -57,14 +61,30 @@ async function ensureMeScopeLoaded(): Promise<MeScopeCache | null> {
     const allowedIds = unrestricted
       ? null
       : [...new Set(departments.map((d) => d.ID).filter((n) => Number.isFinite(n) && n > 0))].sort(
-          (a, b) => a - b,
-        );
+        (a, b) => a - b,
+      );
+
+    const rawDefault = res.data.default_department_id;
+    const defaultDepartmentId =
+      rawDefault != null && Number.isFinite(Number(rawDefault)) && Number(rawDefault) > 0
+        ? Number(rawDefault)
+        : null;
+
+    const rawDefaultCabinet = res.data.default_cabinet_id;
+    const defaultCabinetId =
+      rawDefaultCabinet != null && Number.isFinite(Number(rawDefaultCabinet)) && Number(rawDefaultCabinet) > 0
+        ? Number(rawDefaultCabinet)
+        : null;
 
     meScopeCache = {
       staffUserId: Number(serverUserId),
       unrestricted,
       allowedIds,
       departments,
+      defaultDepartmentId,
+      defaultDepartmentName: res.data.default_department_name ?? null,
+      defaultCabinetId,
+      defaultCabinetName: res.data.default_cabinet_name ?? null,
     };
     return meScopeCache;
   } catch {
@@ -82,6 +102,24 @@ export async function getStaffAllowedDepartmentIds(): Promise<number[] | null | 
   if (c == null) return undefined;
   if (c.unrestricted) return null;
   return c.allowedIds != null && c.allowedIds.length > 0 ? c.allowedIds : [];
+}
+
+/** Division เริ่มต้นจาก Role — '' ถ้าไม่มี / โหลดไม่สำเร็จ */
+export async function getStaffRoleDefaultDepartmentId(): Promise<string> {
+  const c = await ensureMeScopeLoaded();
+  if (c?.defaultDepartmentId != null && c.defaultDepartmentId > 0) {
+    return String(c.defaultDepartmentId);
+  }
+  return '';
+}
+
+/** ตู้ Cabinet เริ่มต้นจาก Role — '' ถ้าไม่มี / โหลดไม่สำเร็จ */
+export async function getStaffRoleDefaultCabinetId(): Promise<string> {
+  const c = await ensureMeScopeLoaded();
+  if (c?.defaultCabinetId != null && c.defaultCabinetId > 0) {
+    return String(c.defaultCabinetId);
+  }
+  return '';
 }
 
 /**
@@ -164,5 +202,88 @@ export function clampDepartmentIdString(
   if (s === '') return '';
   const n = parseInt(s, 10);
   if (Number.isFinite(n) && allowed.includes(n)) return String(n);
+  return '';
+}
+
+/** อ่าน Division เริ่มต้นจาก Role ที่เก็บใน localStorage (fallback ก่อน API พร้อม) */
+export function readStaffRoleDefaultDepartmentIdFromStorage(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    const raw = localStorage.getItem('staff_user');
+    if (!raw) return '';
+    const u = JSON.parse(raw) as { default_department_id?: number | string | null };
+    const id = Number(u.default_department_id);
+    return Number.isFinite(id) && id > 0 ? String(id) : '';
+  } catch {
+    return '';
+  }
+}
+
+/** อ่านตู้ Cabinet เริ่มต้นจาก Role ที่เก็บใน localStorage (fallback ก่อน API พร้อม) */
+export function readStaffRoleDefaultCabinetIdFromStorage(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    const raw = localStorage.getItem('staff_user');
+    if (!raw) return '';
+    const u = JSON.parse(raw) as { default_cabinet_id?: number | string | null };
+    const id = Number(u.default_cabinet_id);
+    return Number.isFinite(id) && id > 0 ? String(id) : '';
+  } catch {
+    return '';
+  }
+}
+
+type CabinetSortable = {
+  id: number;
+  cabinet_name?: string | null;
+  cabinet_code?: string | null;
+};
+
+export function sortCabinetsByName<T extends CabinetSortable>(list: T[]): T[] {
+  return [...list].sort((a, b) =>
+    (a.cabinet_name || a.cabinet_code || String(a.id)).localeCompare(
+      b.cabinet_name || b.cabinet_code || String(b.id),
+      'th',
+    ),
+  );
+}
+
+/**
+ * ค่าเริ่มต้นตู้ = ตู้ ACTIVE ที่ผูกกับ Division
+ * — ถ้ามี preferredId (เช่น ตู้เริ่มต้นจาก Role) และอยู่ในรายการ → ใช้ค่านั้น
+ * — ไม่มี / ไม่อยู่ในรายการ → ตัวแรกหลังเรียงชื่อ (list ควรถูกเรียงมาก่อนแล้ว)
+ */
+export function pickDefaultCabinetId(
+  list: CabinetSortable[],
+  preferredId?: string | number | null,
+): string {
+  if (list.length === 0) return '';
+  const preferred = preferredId != null && String(preferredId).trim() !== '' ? String(preferredId).trim() : '';
+  if (preferred && list.some((c) => String(c.id) === preferred)) {
+    return preferred;
+  }
+  return String(list[0].id);
+}
+
+/**
+ * คำนวณ Division เริ่มต้นจาก Role + ขอบเขตสิทธิ์
+ * — มี default จาก Role → ใช้ (ถ้าอยู่ในสิทธิ์)
+ * — มี scope หลายแผนก → '' (ทั้งหมดตามสิทธิ์)
+ * — ไม่จำกัด + แผนกเดียว → แผนกนั้น
+ */
+export function resolveStaffInitialDepartmentId(opts: {
+  roleDefaultDeptId: string;
+  allowed: number[] | null | undefined;
+  departments: Array<{ ID: number }>;
+}): string {
+  const roleDefaultRaw = opts.roleDefaultDeptId.trim();
+  const roleDefault = roleDefaultRaw
+    ? clampDepartmentIdString(roleDefaultRaw, opts.allowed, roleDefaultRaw)
+    : '';
+  if (roleDefault) return roleDefault;
+
+  const userScope = Array.isArray(opts.allowed) && opts.allowed.length > 0;
+  if (userScope) return '';
+  if (opts.departments.length === 1) return String(opts.departments[0].ID);
   return '';
 }

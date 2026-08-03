@@ -1,24 +1,35 @@
-# smart-cabinet-cu
+# medical-supplies-rajavithi
 # ใส่ใน VirtualHost ที่ใช้ (หรือ Include ใน httpd-vhosts.conf ของ Apache)
-# ลำดับสำคัญ: /api/smart-cabinet-cu/v1/ ต้องอยู่ก่อน /smart-cabinet-cu/ เพื่อไม่ให้ API ชน frontend
+#
+# ลำดับสำคัญ: /api/medical-supplies-rajavithi/ ต้องอยู่ก่อน /medical-supplies-rajavithi/
+# เพื่อไม่ให้ API ชน path ของ frontend
+#
+# ค่าที่ต้องตรงกับ .env:
+#   Frontend  NEXT_PUBLIC_BASE_PATH=/medical-supplies-rajavithi
+#             NEXTAUTH_URL=https://phc.dyndns.biz/medical-supplies-rajavithi
+#             NEXT_PUBLIC_API_URL=https://phc.dyndns.biz/api/medical-supplies-rajavithi/v1
+#             PORT=7200  (PM2 frontend)
+#   Backend   API_NAME=medical-supplies-rajavithi
+#             PORT=7100  (PM2 backend)
+#
+# ปรับ HOST / พอร์ต / IP ด้านล่างให้ตรงเซิร์ฟเวอร์จริง
+# (ถ้า Apache กับ PM2 อยู่เครื่องเดียวกันใช้ 127.0.0.1 ได้)
 
 # ให้แอปรู้ว่าเข้าผ่าน HTTPS และ host ภายนอก (ใช้กับ NextAuth / redirect)
-<LocationMatch "^/(smart-cabinet-cu|api/smart-cabinet-cu)">
+<LocationMatch "^/(medical-supplies-rajavithi|api/medical-supplies-rajavithi)">
     ProxyPreserveHost On
     RequestHeader set X-Forwarded-Proto "https"
     RequestHeader set X-Forwarded-Host "phc.dyndns.biz"
 </LocationMatch>
 
-# API → Backend
-<Location "/medical-supplies-api/v1/" >
+# API → Backend (Nest global prefix: /api/medical-supplies-rajavithi/v1)
+<Location "/api/medical-supplies-rajavithi/">
     ProxyPreserveHost On
-    ProxyPass "http://10.11.9.84:3000/api/smart-cabinet-vn/v1/"
-    ProxyPassReverse "http://10.11.9.84:3000/api/smart-cabinet-vn/v1/"
-
+    ProxyPass        "http://127.0.0.1:7100/api/medical-supplies-rajavithi/"
+    ProxyPassReverse "http://127.0.0.1:7100/api/medical-supplies-rajavithi/"
 </Location>
 
-# Frontend: RewriteRule [P] จัดการทั้ง /smart-cabinet-cu และ /smart-cabinet-cu/...
+# Frontend → Next.js (basePath: /medical-supplies-rajavithi)
 RewriteEngine On
-RewriteRule ^/smart-cabinet-cu(/.*)?$ http://10.11.9.84:4100/smart-cabinet-cu$1 [P,L]
-ProxyPassReverse /smart-cabinet-cu http://10.11.9.84:4100/smart-cabinet-cu
-
+RewriteRule ^/medical-supplies-rajavithi(/.*)?$ http://127.0.0.1:7200/medical-supplies-rajavithi$1 [P,L]
+ProxyPassReverse /medical-supplies-rajavithi http://127.0.0.1:7200/medical-supplies-rajavithi

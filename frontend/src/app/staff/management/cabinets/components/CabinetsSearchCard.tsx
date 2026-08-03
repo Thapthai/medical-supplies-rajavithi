@@ -8,9 +8,10 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import SearchableSelect from '@/app/staff/management/cabinet-departments/components/SearchableSelect';
 import {
-  clampDepartmentIdString,
   fetchStaffDepartmentsForFilter,
   getStaffAllowedDepartmentIds,
+  getStaffRoleDefaultDepartmentId,
+  resolveStaffInitialDepartmentId,
 } from '@/lib/staffDepartmentScope';
 
 const fieldInputClass = 'bg-white';
@@ -50,6 +51,9 @@ export default function CabinetsSearchCard({
   const [loadingDepartments, setLoadingDepartments] = useState(true);
   const allowedDepartmentIdsRef = useRef<number[] | null | undefined>(undefined);
   const [canPickAllRoleDepartments, setCanPickAllRoleDepartments] = useState(false);
+  const [roleDefaultDeptId, setRoleDefaultDeptId] = useState('');
+  const [roleDefaultReady, setRoleDefaultReady] = useState(false);
+  const defaultsAppliedRef = useRef(false);
 
   const [formFilters, setFormFilters] = useState<CabinetsSearchFilters>({
     keyword: '',
@@ -86,6 +90,19 @@ export default function CabinetsSearchCard({
 
   useEffect(() => {
     let cancelled = false;
+    (async () => {
+      const fromApi = await getStaffRoleDefaultDepartmentId();
+      if (cancelled) return;
+      setRoleDefaultDeptId(fromApi);
+      setRoleDefaultReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
     void (async () => {
       const allowed = await getStaffAllowedDepartmentIds();
       if (cancelled) return;
@@ -102,11 +119,6 @@ export default function CabinetsSearchCard({
         });
         if (cancelled) return;
         setDepartments(list as Department[]);
-
-        setFormFilters((prev) => ({
-          ...prev,
-          departmentId: clampDepartmentIdString(prev.departmentId, allowed, ''),
-        }));
       } catch (error) {
         console.error('Failed to load departments:', error);
       } finally {
@@ -117,6 +129,23 @@ export default function CabinetsSearchCard({
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!roleDefaultReady || defaultsAppliedRef.current) return;
+    const allowed = allowedDepartmentIdsRef.current;
+    if (allowed === undefined) return;
+
+    const nextDept = resolveStaffInitialDepartmentId({
+      roleDefaultDeptId: roleDefaultDeptId.trim(),
+      allowed,
+      departments,
+    });
+
+    defaultsAppliedRef.current = true;
+    setFormFilters((prev) =>
+      prev.departmentId === nextDept ? prev : { ...prev, departmentId: nextDept },
+    );
+  }, [roleDefaultReady, roleDefaultDeptId, departments]);
 
   const roleScopeDivisionSummary = useMemo(
     () => (canPickAllRoleDepartments ? buildRoleScopeDivisionSummary(departments) : ''),
@@ -152,7 +181,11 @@ export default function CabinetsSearchCard({
     const allowed = allowedDepartmentIdsRef.current;
     const defaultFilters: CabinetsSearchFilters = {
       keyword: '',
-      departmentId: clampDepartmentIdString('', allowed, ''),
+      departmentId: resolveStaffInitialDepartmentId({
+        roleDefaultDeptId: roleDefaultDeptId.trim(),
+        allowed,
+        departments,
+      }),
     };
     setFormFilters(defaultFilters);
     setAppliedFilters(defaultFilters);

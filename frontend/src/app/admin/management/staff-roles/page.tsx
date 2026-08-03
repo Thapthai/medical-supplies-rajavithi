@@ -16,10 +16,11 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { UserCog, Loader2, Pencil, Plus, Trash2, Shield } from 'lucide-react';
+import { UserCog, Loader2, Pencil, Plus, Trash2, Shield, Building2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AdminAddStaffRoleDialog } from '../permission-role/components/AdminAddStaffRoleDialog';
 import { EditStaffRoleDialog, type StaffRoleRow } from './components/EditStaffRoleDialog';
+import { StaffRoleDivisionDialog } from './components/StaffRoleDivisionDialog';
 import {
   StaffRolesSearchCard,
   type StaffRoleStatusFilter,
@@ -41,6 +42,7 @@ export default function AdminStaffRolesManagementPage() {
   const [statusFilter, setStatusFilter] = useState<StaffRoleStatusFilter>('all');
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [divisionOpen, setDivisionOpen] = useState(false);
   const [selected, setSelected] = useState<StaffRoleRow | null>(null);
 
   const load = useCallback(async () => {
@@ -63,6 +65,18 @@ export default function AdminStaffRolesManagementPage() {
           name: String(r.name ?? ''),
           description: r.description != null ? String(r.description) : null,
           is_active: r.is_active !== false,
+          default_department_id:
+            r.default_department_id != null && Number(r.default_department_id) > 0
+              ? Number(r.default_department_id)
+              : null,
+          default_department_name:
+            r.default_department_name != null ? String(r.default_department_name) : null,
+          default_cabinet_id:
+            r.default_cabinet_id != null && Number(r.default_cabinet_id) > 0
+              ? Number(r.default_cabinet_id)
+              : null,
+          default_cabinet_name:
+            r.default_cabinet_name != null ? String(r.default_cabinet_name) : null,
         })),
       );
     } catch (e) {
@@ -204,9 +218,10 @@ export default function AdminStaffRolesManagementPage() {
                       <TableRow>
                         <TableHead className="w-[120px] font-mono">รหัส</TableHead>
                         <TableHead className="min-w-[160px]">ชื่อแสดง</TableHead>
+                        <TableHead className="hidden lg:table-cell min-w-[140px]">Division เริ่มต้น</TableHead>
                         <TableHead className="hidden md:table-cell min-w-[200px]">คำอธิบาย</TableHead>
                         <TableHead className="w-[100px]">สถานะ</TableHead>
-                        <TableHead className="w-[120px] text-right">จัดการ</TableHead>
+                        <TableHead className="w-[160px] text-right">จัดการ</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -214,6 +229,16 @@ export default function AdminStaffRolesManagementPage() {
                         <TableRow key={r.id}>
                           <TableCell className="font-mono font-medium">{r.code}</TableCell>
                           <TableCell>{r.name}</TableCell>
+                          <TableCell className="hidden max-w-[180px] lg:table-cell">
+                            <div className="truncate text-muted-foreground">
+                              {r.default_department_name || '—'}
+                            </div>
+                            {r.default_cabinet_name ? (
+                              <div className="truncate text-xs text-amber-700">
+                                ตู้: {r.default_cabinet_name}
+                              </div>
+                            ) : null}
+                          </TableCell>
                           <TableCell className="hidden max-w-md truncate text-muted-foreground md:table-cell">
                             {r.description || '—'}
                           </TableCell>
@@ -235,8 +260,23 @@ export default function AdminStaffRolesManagementPage() {
                                 setEditOpen(true);
                               }}
                               aria-label="แก้ไข"
+                              title="แก้ไข"
                             >
                               <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-amber-700 hover:text-amber-800"
+                              type="button"
+                              onClick={() => {
+                                setSelected(r);
+                                setDivisionOpen(true);
+                              }}
+                              aria-label="เลือก Division"
+                              title="เลือก Division"
+                            >
+                              <Building2 className="h-4 w-4" />
                             </Button>
                             <Button
                               variant="ghost"
@@ -245,6 +285,7 @@ export default function AdminStaffRolesManagementPage() {
                               type="button"
                               onClick={() => handleDelete(r)}
                               aria-label="ลบ"
+                              title="ลบ"
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -272,6 +313,20 @@ export default function AdminStaffRolesManagementPage() {
           }}
           role={selected}
           onSaved={load}
+        />
+        <StaffRoleDivisionDialog
+          open={divisionOpen}
+          onOpenChange={(o) => {
+            setDivisionOpen(o);
+            if (!o) setSelected(null);
+          }}
+          role={selected}
+          onSaved={async (patch) => {
+            if (patch && selected) {
+              setSelected({ ...selected, ...patch });
+            }
+            await load();
+          }}
         />
       </AppLayout>
     </ProtectedRoute>

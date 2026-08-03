@@ -12,6 +12,11 @@ import {
   clampDepartmentIdString,
   fetchStaffDepartmentsForFilter,
   getStaffAllowedDepartmentIds,
+  getStaffRoleDefaultCabinetId,
+  getStaffRoleDefaultDepartmentId,
+  pickDefaultCabinetId,
+  resolveStaffInitialDepartmentId,
+  sortCabinetsByName,
 } from '@/lib/staffDepartmentScope';
 import { staffMedicalSupplySubDepartmentsApi } from '@/lib/staffApi/medicalSupplySubDepartmentsApi';
 import type { FilterState } from '../../types';
@@ -40,8 +45,8 @@ interface FilterSectionProps {
   filters: FilterState;
   appliedFilters: FilterState;
   onFilterChange: (key: keyof FilterState, value: string) => void;
-  onSearch: (keyword?: string) => void;
-  onClear: () => void;
+  onSearch: (next?: FilterState) => void;
+  onClear: (overrides?: Partial<FilterState>) => void;
   onRefresh: () => void;
   itemTypes: Array<{ id: string; name: string }>;
   cabinets: Array<{ id: number; cabinet_name?: string; cabinet_code?: string }>;
@@ -75,6 +80,14 @@ export function FilterSection({
   const [loadingDepartments, setLoadingDepartments] = useState(true);
   const allowedDepartmentIdsRef = useRef<number[] | null | undefined>(undefined);
   const [canPickAllRoleDepartments, setCanPickAllRoleDepartments] = useState(false);
+  const initialSearchDoneRef = useRef(false);
+  const [roleDefaultDeptId, setRoleDefaultDeptId] = useState('');
+  const [roleDefaultReady, setRoleDefaultReady] = useState(false);
+  /** ตู้ Cabinet เริ่มต้นจาก Role via GET /staff/me/departments */
+  const [roleDefaultCabinetId, setRoleDefaultCabinetId] = useState('');
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
+  const autoCabinetForDeptRef = useRef('');
 
   const roleScopeDivisionSummary = useMemo(
     () => (canPickAllRoleDepartments ? buildRoleScopeDivisionSummary(departments) : ''),
@@ -100,6 +113,42 @@ export function FilterSection({
     ],
     [canPickAllRoleDepartments, departments, roleScopeDivisionSummary],
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [fromApi, cabinetFromApi] = await Promise.all([
+        getStaffRoleDefaultDepartmentId(),
+        getStaffRoleDefaultCabinetId(),
+      ]);
+      if (cancelled) return;
+      setRoleDefaultDeptId(fromApi);
+      setRoleDefaultCabinetId(cabinetFromApi);
+      setRoleDefaultReady(true);
+      if (fromApi && !filtersRef.current.departmentCode.trim()) {
+        onFilterChange('departmentCode', fromApi);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [onFilterChange]);
+
+  useEffect(() => {
+    const d = roleDefaultDeptId.trim();
+    if (departmentDisabled) {
+      if (filters.departmentCode !== d) {
+        onFilterChange('departmentCode', d);
+        onFilterChange('cabinetId', '');
+        onFilterChange('subDepartmentId', '');
+      }
+      return;
+    }
+    if (!d) return;
+    if (!filters.departmentCode.trim()) {
+      onFilterChange('departmentCode', d);
+    }
+  }, [roleDefaultDeptId, departmentDisabled, filters.departmentCode, onFilterChange]);
 
   const subDepartmentOptions = useMemo(() => {
     const deptId = filters.departmentCode?.trim();
@@ -179,6 +228,97 @@ export function FilterSection({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount + clamp
   }, [departmentDisabled, loadDepartments]);
 
+  /** เมื่อมี Division — ค่าเริ่มต้นตู้ = ตู้ ACTIVE ที่ผูกกับ Division (ตัวแรกหลังเรียงชื่อ) */
+  useEffect(() => {
+    const deptId = filters.departmentCode.trim();
+    if (!deptId) {
+      autoCabinetForDeptRef.current = '';
+      return;
+    }
+
+    const current = filters.cabinetId.trim();
+    const currentOk =
+      current !== '' && cabinets.some((c) => String(c.id) === current);
+    if (currentOk) {
+      autoCabinetForDeptRef.current = deptId;
+      return;
+    }
+    if (cabinets.length === 0) return;
+
+    if (autoCabinetForDeptRef.current === deptId && current === '') return;
+
+    const sorted = sortCabinetsByName(cabinets);
+    const defaultCabinetId = pickDefaultCabinetId(sorted, roleDefaultCabinetId);
+    autoCabinetForDeptRef.current = deptId;
+    if (filters.cabinetId !== defaultCabinetId) {
+      onFilterChange('cabinetId', defaultCabinetId);
+    }
+  }, [cabinets, filters.departmentCode, filters.cabinetId, onFilterChange, roleDefaultCabinetId]);
+
+  useEffect(() => {
+    if (initialSearchDoneRef.current) return;
+    if (loadingDepartments) return;
+    if (!roleDefaultReady) return;
+
+    let cancelled = false;
+    (async () => {
+      const allowed = allowedDepartmentIdsRef.current;
+      if (allowed === undefined) return;
+
+      const departmentCode = resolveStaffInitialDepartmentId({
+        roleDefaultDeptId: roleDefaultDeptId.trim(),
+        allowed,
+        departments,
+      });
+
+      if (
+        departmentCode &&
+        filtersRef.current.departmentCode.trim() !== departmentCode
+      ) {
+        onFilterChange('departmentCode', departmentCode);
+        onFilterChange('subDepartmentId', '');
+        onFilterChange('cabinetId', '');
+        return;
+      }
+
+      let cabinetId = '';
+      if (departmentCode) {
+        if (cabinets.length === 0) return;
+        cabinetId = pickDefaultCabinetId(sortCabinetsByName(cabinets), roleDefaultCabinetId);
+      }
+
+      if (cancelled) return;
+      initialSearchDoneRef.current = true;
+      const today = getTodayDate();
+      const next: FilterState = {
+        searchItemCode: '',
+        startDate: today,
+        endDate: today,
+        itemTypeFilter: 'all',
+        departmentCode,
+        subDepartmentId: '',
+        cabinetId,
+      };
+      if (filtersRef.current.cabinetId !== cabinetId) {
+        onFilterChange('cabinetId', cabinetId);
+      }
+      onSearch(next);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    loadingDepartments,
+    roleDefaultReady,
+    roleDefaultDeptId,
+    roleDefaultCabinetId,
+    departments,
+    cabinets,
+    onFilterChange,
+    onSearch,
+  ]);
+
   useEffect(() => {
     (async () => {
       try {
@@ -233,12 +373,9 @@ export function FilterSection({
       }
     }
     const keyword = searchInput.trim();
+    const next = { ...filters, searchItemCode: keyword };
     onFilterChange('searchItemCode', keyword);
-    if (keyword) {
-      onSearch(keyword);
-    } else {
-      onSearch();
-    }
+    onSearch(next);
   };
 
   const today = getTodayDate();
@@ -260,7 +397,24 @@ export function FilterSection({
 
   const handleClear = () => {
     setSearchInput('');
-    onClear();
+    const resetDeptId = roleDefaultDeptId.trim();
+    const today = getTodayDate();
+    void (async () => {
+      let cabinetId = '';
+      if (resetDeptId) {
+        const sorted = sortCabinetsByName(cabinets);
+        cabinetId = pickDefaultCabinetId(sorted, roleDefaultCabinetId);
+      }
+      onClear({
+        searchItemCode: '',
+        startDate: today,
+        endDate: today,
+        itemTypeFilter: 'all',
+        departmentCode: resetDeptId,
+        subDepartmentId: '',
+        cabinetId,
+      });
+    })();
   };
 
   return (

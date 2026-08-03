@@ -30,7 +30,7 @@ import {
   PAGE_SIZE,
 } from '@/app/staff/management/print-sticker/constants';
 import type { SelectedLine } from '@/app/staff/management/print-sticker/types';
-import { clampCopies } from '@/app/staff/management/print-sticker/utils';
+import { readStaffRoleDefaultDepartmentIdFromStorage } from '@/lib/staffDepartmentScope';
 
 type PreparedStockRow = { RowID: number; ItemCode?: string | null; RfidCode?: string | null };
 
@@ -40,7 +40,7 @@ function manualRefillCap(): number {
 
 export default function PrintStickerTab() {
   const [mode, setMode] = useState<'auto' | 'manual'>('manual');
-  const [departmentId, setDepartmentId] = useState('');
+  const [departmentId, setDepartmentId] = useState(() => readStaffRoleDefaultDepartmentIdFromStorage());
   const [cabinetId, setCabinetId] = useState('');
   const [cabinetStockId, setCabinetStockId] = useState<number | null>(null);
 

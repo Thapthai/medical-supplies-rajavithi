@@ -12,7 +12,7 @@
 - [Tech Stack](#-tech-stack)
 - [โครงสร้างโปรเจกต์](#-โครงสร้างโปรเจกต์)
 - [Quick Start](#-quick-start)
-- [Deployment](#-deployment) · [PM2](README-DEPLOY-PM2.md)
+- [Deployment](#-deployment) · [PM2](README-DEPLOY-PM2.md) · [Apache 2.4](README-DEPLOY-APACHE.md)
 - [API](#-api)
 - [ตัวแปรสภาพแวดล้อม](#-ตัวแปรสภาพแวดล้อม)
 - [เอกสารเพิ่มเติม](#-เอกสารเพิ่มเติม)
@@ -251,6 +251,10 @@ Frontend จะรันที่ **http://localhost:3100**
 
 ย่อหน้า Frontend: `cd frontend && npm ci && npm run build && pm2 start ecosystem.config.cjs` — แก้ `NEXT_PUBLIC_*` ต้อง `build` ใหม่ทุกครั้ง; แก้ `NEXTAUTH_*` / `BACKEND_API_URL` reload ด้วย `npm run pm2:reload`
 
+### Apache 2.4 (reverse proxy)
+
+ตั้ง Apache เป็น reverse proxy ไปพอร์ต PM2 — VirtualHost ตัวอย่างใน `httpd-apache24.conf.example` / snip ใน `httpd-vhosts.conf.example` — คู่มือเต็มใน **[README-DEPLOY-APACHE.md](README-DEPLOY-APACHE.md)**
+
 ### Docker (Frontend)
 
 โฟลเดอร์ `frontend/docker` มี Dockerfile และ docker-compose สำหรับ build และรัน Frontend:
@@ -358,6 +362,8 @@ NEXT_PUBLIC_FIREBASE_PROJECT_ID=...
 
 ## เอกสารเพิ่มเติม
 
+- [README-DEPLOY-PM2.md](README-DEPLOY-PM2.md) — Deploy ด้วย PM2
+- [README-DEPLOY-APACHE.md](README-DEPLOY-APACHE.md) — Deploy reverse proxy ด้วย Apache 2.4
 - [frontend/README.md](frontend/README.md) — Frontend
 - [frontend/DEPLOYMENT-GUIDE.md](frontend/DEPLOYMENT-GUIDE.md) — คู่มือ deploy Frontend
 - [frontend/DOCKER-K8S-SETUP.md](frontend/DOCKER-K8S-SETUP.md) — Docker และ K8s

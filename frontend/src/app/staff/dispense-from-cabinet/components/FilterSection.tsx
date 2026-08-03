@@ -13,6 +13,11 @@ import {
   clampDepartmentIdString,
   fetchStaffDepartmentsForFilter,
   getStaffAllowedDepartmentIds,
+  getStaffRoleDefaultCabinetId,
+  getStaffRoleDefaultDepartmentId,
+  pickDefaultCabinetId,
+  resolveStaffInitialDepartmentId,
+  sortCabinetsByName,
 } from "@/lib/staffDepartmentScope";
 import { staffCabinetDepartmentApi } from "@/lib/staffApi/cabinetApi";
 import { staffMedicalSupplySubDepartmentsApi } from "@/lib/staffApi/medicalSupplySubDepartmentsApi";
@@ -88,11 +93,13 @@ interface FilterSectionProps {
   filters: FilterState;
   appliedFilters: FilterState;
   onFilterChange: (key: keyof FilterState, value: string) => void;
-  onSearch: () => void;
-  onClear: () => void;
+  onSearch: (next: FilterState) => void;
+  onClear: (overrides?: Partial<FilterState>) => void;
   onRefresh: () => void;
   loading: boolean;
+  initialDepartmentId?: string;
   departmentDisabled?: boolean;
+  initialAutoSearch?: boolean;
 }
 
 export default function FilterSection({
@@ -103,7 +110,9 @@ export default function FilterSection({
   onClear,
   onRefresh,
   loading,
+  initialDepartmentId,
   departmentDisabled,
+  initialAutoSearch = true,
 }: FilterSectionProps) {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [subDepartmentsMaster, setSubDepartmentsMaster] = useState<SubDepartmentRow[]>([]);
@@ -112,6 +121,15 @@ export default function FilterSection({
   const [loadingCabinets, setLoadingCabinets] = useState(false);
   const allowedDepartmentIdsRef = useRef<number[] | null | undefined>(undefined);
   const [canPickAllScopedDepartments, setCanPickAllScopedDepartments] = useState(false);
+  const initialSearchDoneRef = useRef(false);
+  const [roleDefaultDeptId, setRoleDefaultDeptId] = useState(
+    () => initialDepartmentId?.trim() || "",
+  );
+  const [roleDefaultReady, setRoleDefaultReady] = useState(false);
+  /** ตู้ Cabinet เริ่มต้นจาก Role via GET /staff/me/departments */
+  const [roleDefaultCabinetId, setRoleDefaultCabinetId] = useState("");
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
 
   const subDepartmentOptions = useMemo(() => {
     const deptId = filters.departmentId?.trim();
@@ -156,10 +174,46 @@ export default function FilterSection({
     [canPickAllScopedDepartments, departments, scopedDivisionSummary],
   );
 
-  const loadDepartments = async (keyword?: string) => {
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [fromApi, cabinetFromApi] = await Promise.all([
+        getStaffRoleDefaultDepartmentId(),
+        getStaffRoleDefaultCabinetId(),
+      ]);
+      if (cancelled) return;
+      const next = fromApi || initialDepartmentId?.trim() || "";
+      setRoleDefaultDeptId(next);
+      setRoleDefaultCabinetId(cabinetFromApi);
+      setRoleDefaultReady(true);
+      if (next && !filtersRef.current.departmentId.trim()) {
+        onFilterChange("departmentId", next);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [initialDepartmentId, onFilterChange]);
+
+  useEffect(() => {
+    const d = roleDefaultDeptId.trim();
+    if (departmentDisabled) {
+      if (filters.departmentId !== d) {
+        onFilterChange("departmentId", d);
+        onFilterChange("cabinetId", "");
+        onFilterChange("subDepartmentId", "");
+      }
+      return;
+    }
+    if (!d) return;
+    if (!filters.departmentId.trim()) {
+      onFilterChange("departmentId", d);
+    }
+  }, [roleDefaultDeptId, departmentDisabled, filters.departmentId, onFilterChange]);
+
+  const loadDepartments = useCallback(async (keyword?: string) => {
     try {
       setLoadingDepartments(true);
-      /** ref ยังเป็น undefined ได้ถ้า user เปิดค้นหา Division ก่อน effect แรกเสร็จ — โหลด scope ก่อน */
       let allowed = allowedDepartmentIdsRef.current;
       if (allowed === undefined) {
         allowed = await getStaffAllowedDepartmentIds();
@@ -179,9 +233,9 @@ export default function FilterSection({
     } finally {
       setLoadingDepartments(false);
     }
-  };
+  }, []);
 
-  const resolveCabinets = useCallback(async (departmentIdStr: string, keyword?: string) => {
+  const resolveCabinets = useCallback(async (departmentIdStr: string, keyword?: string): Promise<Cabinet[]> => {
     try {
       setLoadingCabinets(true);
       let next: Cabinet[] = [];
@@ -213,13 +267,14 @@ export default function FilterSection({
           }
           next = Array.from(uniqueCabinets.values());
         }
+        next = sortCabinetsByName(next);
         setCabinets(next);
-        return;
+        return next;
       }
       const deptId = parseInt(trimmed, 10);
       if (Number.isNaN(deptId)) {
         setCabinets([]);
-        return;
+        return [];
       }
       const response = await staffCabinetDepartmentApi.getAll({
         departmentId: deptId,
@@ -238,10 +293,13 @@ export default function FilterSection({
           });
         next = Array.from(uniqueCabinets.values());
       }
+      next = sortCabinetsByName(next);
       setCabinets(next);
+      return next;
     } catch (error) {
       console.error("Failed to load cabinets:", error);
       setCabinets([]);
+      return [];
     } finally {
       setLoadingCabinets(false);
     }
@@ -270,8 +328,8 @@ export default function FilterSection({
         if (!cancelled) setLoadingDepartments(false);
       }
       if (cancelled || departmentDisabled) return;
-      const nextDept = clampDepartmentIdString(filters.departmentId, allowed, "");
-      if (nextDept !== filters.departmentId) {
+      const nextDept = clampDepartmentIdString(filtersRef.current.departmentId, allowed, "");
+      if (nextDept !== filtersRef.current.departmentId) {
         onFilterChange("departmentId", nextDept);
         onFilterChange("cabinetId", "");
         onFilterChange("subDepartmentId", "");
@@ -308,12 +366,91 @@ export default function FilterSection({
     void resolveCabinets(filters.departmentId);
   }, [filters.departmentId, resolveCabinets]);
 
+  const autoCabinetForDeptRef = useRef("");
+
+  /** เมื่อมี Division — ค่าเริ่มต้นตู้ = ตู้ ACTIVE ที่ผูกกับ Division */
   useEffect(() => {
-    if (filters.cabinetId && cabinets.length > 0) {
-      const exists = cabinets.some((c) => c.id.toString() === filters.cabinetId);
-      if (!exists) onFilterChange("cabinetId", "");
+    if (loadingCabinets) return;
+    const deptId = filters.departmentId.trim();
+    if (!deptId) {
+      autoCabinetForDeptRef.current = "";
+      return;
     }
-  }, [cabinets, filters.cabinetId, onFilterChange]);
+
+    const current = filters.cabinetId.trim();
+    const currentOk =
+      current !== "" && cabinets.some((c) => String(c.id) === current);
+    if (currentOk) {
+      autoCabinetForDeptRef.current = deptId;
+      return;
+    }
+    if (cabinets.length === 0) return;
+
+    /** ผู้ใช้เลือก "ทั้งหมด" หลังตั้งค่าเริ่มต้นของ Division นี้แล้ว — ไม่บังคับกลับ */
+    if (autoCabinetForDeptRef.current === deptId && current === "") return;
+
+    const defaultCabinetId = pickDefaultCabinetId(cabinets, roleDefaultCabinetId);
+    autoCabinetForDeptRef.current = deptId;
+    if (filters.cabinetId !== defaultCabinetId) {
+      onFilterChange("cabinetId", defaultCabinetId);
+    }
+  }, [cabinets, loadingCabinets, filters.departmentId, filters.cabinetId, onFilterChange, roleDefaultCabinetId]);
+
+  useEffect(() => {
+    if (!initialAutoSearch) return;
+    if (initialSearchDoneRef.current) return;
+    if (loadingDepartments) return;
+    if (!roleDefaultReady) return;
+
+    let cancelled = false;
+    (async () => {
+      let departmentId = "";
+
+      if (departmentDisabled) {
+        departmentId = roleDefaultDeptId.trim();
+      } else {
+        const allowed = allowedDepartmentIdsRef.current;
+        if (allowed === undefined) return;
+
+        departmentId = resolveStaffInitialDepartmentId({
+          roleDefaultDeptId,
+          allowed,
+          departments,
+        });
+      }
+
+      let cabinetId = "";
+      if (departmentId) {
+        const list = await resolveCabinets(departmentId);
+        if (cancelled) return;
+        cabinetId = pickDefaultCabinetId(list, roleDefaultCabinetId);
+      }
+
+      if (cancelled) return;
+      initialSearchDoneRef.current = true;
+      const current = filtersRef.current;
+      onSearch({
+        ...current,
+        departmentId,
+        cabinetId,
+        subDepartmentId: "",
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    initialAutoSearch,
+    departmentDisabled,
+    roleDefaultDeptId,
+    roleDefaultCabinetId,
+    roleDefaultReady,
+    loadingDepartments,
+    departments,
+    resolveCabinets,
+    onSearch,
+  ]);
 
   const handleSearchClick = () => {
     if (!departmentDisabled) {
@@ -325,7 +462,28 @@ export default function FilterSection({
         return;
       }
     }
-    onSearch();
+    onSearch(filters);
+  };
+
+  const handleClear = () => {
+    const resetDeptId = roleDefaultDeptId.trim();
+    const today = getTodayDate();
+    void (async () => {
+      let cabinetId = "";
+      if (resetDeptId) {
+        const list = await resolveCabinets(resetDeptId);
+        cabinetId = pickDefaultCabinetId(list, roleDefaultCabinetId);
+      }
+      onClear({
+        searchItemCode: "",
+        startDate: today,
+        endDate: today,
+        itemTypeFilter: "all",
+        departmentId: resetDeptId,
+        subDepartmentId: "",
+        cabinetId,
+      });
+    })();
   };
 
   const today = getTodayDate();
@@ -409,7 +567,7 @@ export default function FilterSection({
                   ? "เลือก Division หรือทั้งหมด (ตามสิทธิ์ของคุณ)"
                   : "เลือก Division (บังคับ)"
               }
-              required={!canPickAllScopedDepartments}
+              required={!canPickAllScopedDepartments && !roleDefaultDeptId.trim()}
               value={filters.departmentId}
               initialDisplay={
                 canPickAllScopedDepartments && !filters.departmentId?.trim()
@@ -417,7 +575,16 @@ export default function FilterSection({
                       label: "ทั้งหมด",
                       ...(scopedDivisionSummary ? { subLabel: scopedDivisionSummary } : {}),
                     }
-                  : undefined
+                  : filters.departmentId.trim()
+                    ? (() => {
+                        const d = departments.find(
+                          (x) => String(x.ID) === filters.departmentId.trim(),
+                        );
+                        return d
+                          ? { label: d.DepName || `แผนก #${d.ID}`, subLabel: d.DepName2 || undefined }
+                          : undefined;
+                      })()
+                    : undefined
               }
               onValueChange={(value) => {
                 if (departmentDisabled) return;
@@ -430,6 +597,8 @@ export default function FilterSection({
               onSearch={loadDepartments}
               searchPlaceholder="ค้นหาชื่อ Division..."
               disabled={departmentDisabled}
+              allowClear={canPickAllScopedDepartments || Boolean(roleDefaultDeptId.trim())}
+              clearLabel={canPickAllScopedDepartments ? "ทั้งหมด" : "ล้างการเลือก"}
             />
 
             <SearchableSelect
@@ -533,7 +702,7 @@ export default function FilterSection({
               variant="ghost"
               size="sm"
               className="h-7 gap-1 px-2 text-xs text-slate-600"
-              onClick={onClear}
+              onClick={handleClear}
             >
               <X className="h-3.5 w-3.5" />
               ล้างตัวกรอง

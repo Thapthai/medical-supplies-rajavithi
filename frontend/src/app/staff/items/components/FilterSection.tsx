@@ -13,6 +13,9 @@ import {
   clampDepartmentIdString,
   fetchStaffDepartmentsForFilter,
   getStaffAllowedDepartmentIds,
+  getStaffRoleDefaultCabinetId,
+  getStaffRoleDefaultDepartmentId,
+  pickDefaultCabinetId,
 } from "@/lib/staffDepartmentScope";
 
 const fieldInputClass = "bg-white";
@@ -65,6 +68,15 @@ function buildScopedDivisionSummary(depts: Department[]): string {
   return `${names.slice(0, 5).join(", ")} … (+${names.length - 5})`;
 }
 
+function sortCabinets(list: Cabinet[]): Cabinet[] {
+  return [...list].sort((a, b) =>
+    (a.cabinet_name || a.cabinet_code || String(a.id)).localeCompare(
+      b.cabinet_name || b.cabinet_code || String(b.id),
+      "th",
+    ),
+  );
+}
+
 export type StaffItemsSearchFilters = {
   searchTerm: string;
   departmentId: string;
@@ -104,19 +116,57 @@ export default function FilterSection({
   const allowedDepartmentIdsRef = useRef<number[] | null | undefined>(undefined);
   const [canPickAllScopedDepartments, setCanPickAllScopedDepartments] = useState(false);
   const initialSearchDoneRef = useRef(false);
+  /** จาก Role via GET /staff/me/departments — fallback จาก prop (localStorage) */
+  const [roleDefaultDeptId, setRoleDefaultDeptId] = useState(
+    () => initialDepartmentId?.trim() || "",
+  );
+  const [roleDefaultReady, setRoleDefaultReady] = useState(false);
+  /** ตู้ Cabinet เริ่มต้นจาก Role via GET /staff/me/departments */
+  const [roleDefaultCabinetId, setRoleDefaultCabinetId] = useState("");
 
   const [formFilters, setFormFilters] = useState({
     searchTerm: "",
-    departmentId: departmentDisabled ? (initialDepartmentId?.trim() || "") : "",
+    departmentId: initialDepartmentId?.trim() || "",
     cabinetId: "",
     statusFilter: "all",
   });
 
   useEffect(() => {
-    if (!departmentDisabled) return;
-    const d = initialDepartmentId?.trim() || "";
-    setFormFilters((prev) => ({ ...prev, departmentId: d }));
-  }, [initialDepartmentId, departmentDisabled]);
+    let cancelled = false;
+    (async () => {
+      const [fromApi, cabinetFromApi] = await Promise.all([
+        getStaffRoleDefaultDepartmentId(),
+        getStaffRoleDefaultCabinetId(),
+      ]);
+      if (cancelled) return;
+      const next = fromApi || initialDepartmentId?.trim() || "";
+      setRoleDefaultDeptId(next);
+      setRoleDefaultCabinetId(cabinetFromApi);
+      setRoleDefaultReady(true);
+      if (next) {
+        setFormFilters((prev) =>
+          prev.departmentId === next ? prev : { ...prev, departmentId: next },
+        );
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [initialDepartmentId]);
+
+  useEffect(() => {
+    const d = roleDefaultDeptId.trim();
+    if (departmentDisabled) {
+      setFormFilters((prev) =>
+        prev.departmentId === d ? prev : { ...prev, departmentId: d, cabinetId: "" },
+      );
+      return;
+    }
+    if (!d) return;
+    setFormFilters((prev) =>
+      prev.departmentId === d ? prev : { ...prev, departmentId: d },
+    );
+  }, [roleDefaultDeptId, departmentDisabled]);
 
   const loadDepartments = async (keyword?: string) => {
     try {
@@ -142,7 +192,7 @@ export default function FilterSection({
     }
   };
 
-  const resolveCabinets = useCallback(async (departmentIdStr: string, keyword?: string) => {
+  const resolveCabinets = useCallback(async (departmentIdStr: string, keyword?: string): Promise<Cabinet[]> => {
     try {
       setLoadingCabinets(true);
       let next: Cabinet[] = [];
@@ -174,13 +224,14 @@ export default function FilterSection({
           }
           next = Array.from(uniqueCabinets.values());
         }
+        next = sortCabinets(next);
         setCabinets(next);
-        return;
+        return next;
       }
       const deptId = parseInt(trimmed, 10);
       if (Number.isNaN(deptId)) {
         setCabinets([]);
-        return;
+        return [];
       }
       const response = await staffCabinetDepartmentApi.getAll({
         departmentId: deptId,
@@ -199,10 +250,13 @@ export default function FilterSection({
           });
         next = Array.from(uniqueCabinets.values());
       }
+      next = sortCabinets(next);
       setCabinets(next);
+      return next;
     } catch (error) {
       console.error("Failed to load cabinets:", error);
       setCabinets([]);
+      return [];
     } finally {
       setLoadingCabinets(false);
     }
@@ -250,69 +304,103 @@ export default function FilterSection({
     void resolveCabinets(formFilters.departmentId);
   }, [formFilters.departmentId, resolveCabinets]);
 
+  /** เมื่อมี Division — ค่าเริ่มต้นตู้ = ตู้ ACTIVE ที่ผูกกับ Division (ตัวแรกหลังเรียงชื่อ) */
   useEffect(() => {
-    if (formFilters.cabinetId && cabinets.length > 0) {
-      const cabinetExists = cabinets.some((cabinet) => cabinet.id.toString() === formFilters.cabinetId);
-      if (!cabinetExists) {
-        setFormFilters((prev) => ({
-          ...prev,
-          cabinetId: "",
-        }));
-      }
-    }
-  }, [cabinets, formFilters.cabinetId]);
+    if (loadingCabinets) return;
+    const deptId = formFilters.departmentId.trim();
+    if (!deptId) return;
+
+    const current = formFilters.cabinetId.trim();
+    const currentOk =
+      current !== "" && cabinets.some((c) => String(c.id) === current);
+    if (currentOk) return;
+
+    const defaultCabinetId = pickDefaultCabinetId(cabinets, roleDefaultCabinetId);
+    setFormFilters((prev) =>
+      prev.cabinetId === defaultCabinetId ? prev : { ...prev, cabinetId: defaultCabinetId },
+    );
+  }, [cabinets, loadingCabinets, formFilters.departmentId, formFilters.cabinetId, roleDefaultCabinetId]);
 
   useEffect(() => {
     if (!initialAutoSearch) return;
     if (initialSearchDoneRef.current) return;
     if (loadingDepartments) return;
+    if (!roleDefaultReady) return;
 
-    let departmentId = "";
-    const cabinetId = "";
+    let cancelled = false;
+    (async () => {
+      let departmentId = "";
 
-    if (departmentDisabled) {
-      departmentId = (initialDepartmentId ?? "").trim();
-    } else {
-      const allowed = allowedDepartmentIdsRef.current;
-      if (allowed === undefined) {
-        return;
-      }
-      const userScope = Array.isArray(allowed) && allowed.length > 0;
-      if (userScope) {
-        /** ค่าเริ่มต้น = ทั้งหมด (WHERE department_id IN แผนกที่ผู้ใช้ได้รับสิทธิ์) */
-        departmentId = "";
-      } else if (departments.length === 1) {
-        departmentId = String(departments[0].ID);
-      } else if (departments.length === 0) {
-        initialSearchDoneRef.current = true;
-        return;
+      if (departmentDisabled) {
+        departmentId = roleDefaultDeptId.trim();
       } else {
-        /** unrestricted + หลายแผนกใน dropdown — ให้ user เลือก Division ก่อน */
-        initialSearchDoneRef.current = true;
-        return;
-      }
-    }
+        const allowed = allowedDepartmentIdsRef.current;
+        if (allowed === undefined) {
+          return;
+        }
 
-    initialSearchDoneRef.current = true;
-    setFormFilters((prev) => ({
-      ...prev,
-      departmentId,
-      cabinetId,
-    }));
-    onBeforeSearch?.();
-    onSearch({
-      searchTerm: "",
-      departmentId,
-      cabinetId,
-      statusFilter: "all",
-      keyword: "",
-    });
+        /** ค่าเริ่มต้นจาก Role (default_department) — ใช้ถ้าอยู่ในขอบเขตสิทธิ์ */
+        const roleDefaultRaw = roleDefaultDeptId.trim();
+        const roleDefault = roleDefaultRaw
+          ? clampDepartmentIdString(roleDefaultRaw, allowed, roleDefaultRaw)
+          : "";
+
+        if (roleDefault) {
+          departmentId = roleDefault;
+        } else {
+          const userScope = Array.isArray(allowed) && allowed.length > 0;
+          if (userScope) {
+            /** ไม่มี default จาก Role → ทั้งหมดตามสิทธิ์ (เหมือนเดิม) */
+            departmentId = "";
+          } else if (departments.length === 1) {
+            departmentId = String(departments[0].ID);
+          } else if (departments.length === 0) {
+            initialSearchDoneRef.current = true;
+            return;
+          } else {
+            /** ไม่มี default + หลายแผนก → ให้ user เลือกเอง (เหมือนเดิม) */
+            initialSearchDoneRef.current = true;
+            return;
+          }
+        }
+      }
+
+      let cabinetId = "";
+      if (departmentId) {
+        const list = await resolveCabinets(departmentId);
+        if (cancelled) return;
+        cabinetId = pickDefaultCabinetId(list, roleDefaultCabinetId);
+      }
+
+      if (cancelled) return;
+      initialSearchDoneRef.current = true;
+      setFormFilters((prev) => ({
+        ...prev,
+        departmentId,
+        cabinetId,
+      }));
+      onBeforeSearch?.();
+      onSearch({
+        searchTerm: "",
+        departmentId,
+        cabinetId,
+        statusFilter: "all",
+        keyword: "",
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [
     initialAutoSearch,
     departmentDisabled,
-    initialDepartmentId,
+    roleDefaultDeptId,
+    roleDefaultCabinetId,
+    roleDefaultReady,
     loadingDepartments,
     departments,
+    resolveCabinets,
     onSearch,
     onBeforeSearch,
   ]);
@@ -339,10 +427,11 @@ export default function FilterSection({
   };
 
   const handleReset = () => {
-    const lockedDeptId = departmentDisabled ? (initialDepartmentId?.trim() || "") : "";
+    /** มี default จาก Role → กลับค่าเริ่มต้นนั้น; ไม่มี → ว่างให้เลือกเองเหมือนเดิม */
+    const resetDeptId = roleDefaultDeptId.trim();
     setFormFilters({
       searchTerm: "",
-      departmentId: lockedDeptId,
+      departmentId: resetDeptId,
       cabinetId: "",
       statusFilter: "all",
     });
@@ -350,14 +439,21 @@ export default function FilterSection({
       onReset();
       return;
     }
-    const defaultFilters: StaffItemsSearchFilters = {
-      searchTerm: "",
-      departmentId: lockedDeptId,
-      cabinetId: "",
-      statusFilter: "all",
-      keyword: "",
-    };
-    onSearch(defaultFilters);
+    void (async () => {
+      let cabinetId = "";
+      if (resetDeptId) {
+        const list = await resolveCabinets(resetDeptId);
+        cabinetId = pickDefaultCabinetId(list, roleDefaultCabinetId);
+      }
+      setFormFilters((prev) => ({ ...prev, cabinetId }));
+      onSearch({
+        searchTerm: "",
+        departmentId: resetDeptId,
+        cabinetId,
+        statusFilter: "all",
+        keyword: "",
+      });
+    })();
   };
 
   const scopedDivisionSummary = useMemo(
@@ -412,7 +508,9 @@ export default function FilterSection({
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-slate-900">ค้นหาและกรอง</p>
             <p className="text-xs text-slate-500">
-              ค้นจากรหัส/ชื่อเวชภัณฑ์ · เลือก Division และตู้ Cabinet (ตามสิทธิ์ของคุณ)
+              {roleDefaultDeptId.trim()
+                ? "มี Division เริ่มต้นจาก Role — เปลี่ยนเลือกได้ตามต้องการ"
+                : "ค้นจากรหัส/ชื่อเวชภัณฑ์ · เลือก Division และตู้ Cabinet (ตามสิทธิ์ของคุณ)"}
             </p>
           </div>
         </div>
@@ -448,7 +546,7 @@ export default function FilterSection({
                   ? "เลือก Division หรือทั้งหมด (ตามสิทธิ์ของคุณ)"
                   : "เลือก Division (บังคับ)"
               }
-              required={!canPickAllScopedDepartments}
+              required={!canPickAllScopedDepartments && !roleDefaultDeptId.trim()}
               value={formFilters.departmentId}
               initialDisplay={
                 canPickAllScopedDepartments && formFilters.departmentId.trim() === ""
@@ -456,7 +554,16 @@ export default function FilterSection({
                     label: "ทั้งหมด",
                     ...(scopedDivisionSummary ? { subLabel: scopedDivisionSummary } : {}),
                   }
-                  : undefined
+                  : formFilters.departmentId.trim()
+                    ? (() => {
+                        const d = departments.find(
+                          (x) => String(x.ID) === formFilters.departmentId.trim(),
+                        );
+                        return d
+                          ? { label: d.DepName || `แผนก #${d.ID}`, subLabel: d.DepName2 || undefined }
+                          : undefined;
+                      })()
+                    : undefined
               }
               onValueChange={(value) => {
                 if (departmentDisabled) return;
@@ -471,6 +578,8 @@ export default function FilterSection({
               onSearch={loadDepartments}
               searchPlaceholder="ค้นหาชื่อ Division..."
               disabled={departmentDisabled}
+              allowClear={canPickAllScopedDepartments || Boolean(roleDefaultDeptId.trim())}
+              clearLabel={canPickAllScopedDepartments ? "ทั้งหมด" : "ล้างการเลือก"}
             />
 
             <SearchableSelect

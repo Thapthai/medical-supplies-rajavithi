@@ -93,13 +93,26 @@ function todayBangkokYmd(): string {
   }).format(new Date());
 }
 
+function readRoleDefaultDepartmentId(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    const raw = localStorage.getItem('staff_user');
+    if (!raw) return '';
+    const u = JSON.parse(raw) as { default_department_id?: number | string | null };
+    const id = Number(u.default_department_id);
+    return Number.isFinite(id) && id > 0 ? String(id) : '';
+  } catch {
+    return '';
+  }
+}
+
 function initialBorrowFilters(): BorrowFilterState {
   const d = todayBangkokYmd();
   return {
     searchItemCode: '',
     startDate: d,
     endDate: d,
-    departmentId: '',
+    departmentId: readRoleDefaultDepartmentId(),
     cabinetId: '',
     borrowDepartmentId: '',
   };
@@ -110,10 +123,13 @@ export default function StaffItemBorrowPage() {
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<BorrowFilterState>(initialBorrowFilters);
   const [appliedFilters, setAppliedFilters] = useState<BorrowFilterState>(initialBorrowFilters);
+  /** รอ FilterSection ตั้งค่า Division/ตู้เริ่มต้นก่อนโหลดครั้งแรก */
+  const [filtersBootstrapped, setFiltersBootstrapped] = useState(false);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [lastPage, setLastPage] = useState(1);
   const limit = 20;
+  const initialDepartmentId = useState(() => readRoleDefaultDepartmentId())[0];
 
   const fetchData = useCallback(async () => {
     try {
@@ -154,25 +170,32 @@ export default function StaffItemBorrowPage() {
   }, [page, appliedFilters]);
 
   useEffect(() => {
+    if (!filtersBootstrapped) return;
     void fetchData();
-  }, [fetchData]);
+  }, [fetchData, filtersBootstrapped]);
 
-  const onSearch = () => {
-    setAppliedFilters(filters);
+  const onSearch = useCallback((next: BorrowFilterState) => {
+    setFilters(next);
+    setAppliedFilters(next);
     setPage(1);
-  };
-  const onFilterChange = (key: keyof BorrowFilterState, value: string) => {
+    setFiltersBootstrapped(true);
+  }, []);
+
+  const onFilterChange = useCallback((key: keyof BorrowFilterState, value: string) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
-  };
-  const onClear = () => {
-    const reset = initialBorrowFilters();
+  }, []);
+
+  const onClear = useCallback((overrides?: Partial<BorrowFilterState>) => {
+    const reset = { ...initialBorrowFilters(), ...overrides };
     setFilters(reset);
     setAppliedFilters(reset);
     setPage(1);
-  };
-  const onRefresh = () => {
+    setFiltersBootstrapped(true);
+  }, []);
+
+  const onRefresh = useCallback(() => {
     void fetchData();
-  };
+  }, [fetchData]);
 
   return (
     <div className="space-y-6">
@@ -193,6 +216,7 @@ export default function StaffItemBorrowPage() {
         onClear={onClear}
         onRefresh={onRefresh}
         loading={loading}
+        initialDepartmentId={initialDepartmentId}
       />
 
       <Card>

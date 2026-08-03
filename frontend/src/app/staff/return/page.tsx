@@ -1,13 +1,23 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { RotateCcw, History, Undo2 } from 'lucide-react';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { staffItemsApi } from '@/lib/staffApi/itemsApi';
 import { staffMedicalSuppliesApi } from '@/lib/staffApi/medicalSuppliesApi';
-import { getStaffAllowedDepartmentIds } from '@/lib/staffDepartmentScope';
+import {
+  getStaffAllowedDepartmentIds,
+  getStaffRoleDefaultCabinetId,
+  getStaffRoleDefaultDepartmentId,
+  pickDefaultCabinetId,
+  readStaffRoleDefaultCabinetIdFromStorage,
+  readStaffRoleDefaultDepartmentIdFromStorage,
+  resolveStaffInitialDepartmentId,
+  sortCabinetsByName,
+  fetchStaffDepartmentsForFilter,
+} from '@/lib/staffDepartmentScope';
 import { staffCabinetApi, staffCabinetDepartmentApi } from '@/lib/staffApi/cabinetApi';
 import { staffMedicalSupplySubDepartmentsApi } from '@/lib/staffApi/medicalSupplySubDepartmentsApi';
 import type { SubDepartmentOption } from '@/app/admin/medical-supplies/components/MedicalSuppliesSearchFilters';
@@ -50,7 +60,9 @@ export default function ReturnMedicalSuppliesPage() {
   const [willReturnItems, setWillReturnItems] = useState<WillReturnItem[]>([]);
   const [loadingWillReturn, setLoadingWillReturn] = useState(false);
 
-  const [filterDepartmentId, setFilterDepartmentId] = useState('');
+  const [filterDepartmentId, setFilterDepartmentId] = useState(() =>
+    readStaffRoleDefaultDepartmentIdFromStorage(),
+  );
   const [filterCabinetId, setFilterCabinetId] = useState('');
   const [filterSubDepartmentId, setFilterSubDepartmentId] = useState('');
   const [filterItemCode, setFilterItemCode] = useState('');
@@ -58,7 +70,7 @@ export default function ReturnMedicalSuppliesPage() {
   const [filterEndDate, setFilterEndDate] = useState(() => getTodayDate());
   const [appliedWillReturnFilters, setAppliedWillReturnFilters] = useState<AppliedWillReturnFilters>(
     () => ({
-      departmentId: '',
+      departmentId: readStaffRoleDefaultDepartmentIdFromStorage(),
       cabinetId: '',
       subDepartmentId: '',
       itemCode: '',
@@ -69,11 +81,17 @@ export default function ReturnMedicalSuppliesPage() {
 
   const [subDepartmentsMaster, setSubDepartmentsMaster] = useState<SubDepartmentOption[]>([]);
   const [cabinets, setCabinets] = useState<Array<{ id: number; cabinet_name?: string; cabinet_code?: string }>>([]);
+  /** ตู้ Cabinet เริ่มต้นจาก Role via GET /staff/me/departments — fallback จาก localStorage ก่อน API พร้อม */
+  const [roleDefaultCabinetId, setRoleDefaultCabinetId] = useState(() =>
+    readStaffRoleDefaultCabinetIdFromStorage(),
+  );
 
   const [returnHistoryDateFrom, setReturnHistoryDateFrom] = useState(() => getTodayDate());
   const [returnHistoryDateTo, setReturnHistoryDateTo] = useState(() => getTodayDate());
   const [returnHistoryReason, setReturnHistoryReason] = useState<string>('ALL');
-  const [returnHistoryDepartmentCode, setReturnHistoryDepartmentCode] = useState<string>('');
+  const [returnHistoryDepartmentCode, setReturnHistoryDepartmentCode] = useState<string>(() =>
+    readStaffRoleDefaultDepartmentIdFromStorage(),
+  );
   const [returnHistorySubDepartmentId, setReturnHistorySubDepartmentId] = useState('');
   const [returnHistoryCabinetId, setReturnHistoryCabinetId] = useState('');
   const [returnHistoryItemKeyword, setReturnHistoryItemKeyword] = useState('');
@@ -82,7 +100,7 @@ export default function ReturnMedicalSuppliesPage() {
       dateFrom: getTodayDate(),
       dateTo: getTodayDate(),
       reason: 'ALL',
-      departmentCode: '',
+      departmentCode: readStaffRoleDefaultDepartmentIdFromStorage(),
       subDepartmentId: '',
       cabinetId: '',
       itemKeyword: '',
@@ -177,7 +195,7 @@ export default function ReturnMedicalSuppliesPage() {
               if (mapped && !unique.has(mapped.id)) unique.set(mapped.id, mapped);
             }
           }
-          next = Array.from(unique.values()).sort((a, b) => a.id - b.id);
+          next = sortCabinetsByName(Array.from(unique.values()));
           return next;
         }
         const res = await staffCabinetApi.getAll({ page: 1, limit: 500 });
@@ -214,32 +232,69 @@ export default function ReturnMedicalSuppliesPage() {
         }
         next = Array.from(unique.values());
       }
-      return next;
+      return sortCabinetsByName(next);
     } catch {
       return [];
     }
   }, []);
 
+  const willReturnAutoCabinetRef = useRef('');
+  const historyAutoCabinetRef = useRef('');
+  const willReturnInitialSearchDoneRef = useRef(false);
+
+  const applyDefaultCabinet = useCallback(
+    (
+      deptId: string,
+      list: CabinetFilterOption[],
+      currentCabinetId: string,
+      autoRef: { current: string },
+      setter: (value: string) => void,
+    ) => {
+      const trimmedDept = deptId.trim();
+      if (!trimmedDept) {
+        autoRef.current = '';
+        return;
+      }
+      const current = currentCabinetId.trim();
+      const currentOk = current !== '' && list.some((c) => String(c.id) === current);
+      if (currentOk) {
+        autoRef.current = trimmedDept;
+        return;
+      }
+      if (list.length === 0) return;
+      if (autoRef.current === trimmedDept && current === '') return;
+      const defaultId = pickDefaultCabinetId(list, roleDefaultCabinetId);
+      autoRef.current = trimmedDept;
+      if (currentCabinetId !== defaultId) {
+        setter(defaultId);
+      }
+    },
+    [roleDefaultCabinetId],
+  );
+
   const loadCabinetsForFilter = useCallback(
     async (departmentIdStr: string) => {
       const next = await resolveCabinetsForFilter(departmentIdStr);
       setCabinets(next);
-      setFilterCabinetId((prev) => {
-        if (next.length === 0) return '';
-        if (next.length === 1) return String(next[0].id);
-        if (!prev?.trim()) return '';
-        const id = parseInt(prev, 10);
-        if (Number.isNaN(id)) return '';
-        return next.some((c) => c.id === id) ? prev : '';
-      });
+      applyDefaultCabinet(
+        departmentIdStr,
+        next,
+        filterCabinetId,
+        willReturnAutoCabinetRef,
+        setFilterCabinetId,
+      );
     },
-    [resolveCabinetsForFilter],
+    [resolveCabinetsForFilter, applyDefaultCabinet, filterCabinetId],
   );
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       try {
         const allowed = await getStaffAllowedDepartmentIds();
+        const roleDefault = await getStaffRoleDefaultDepartmentId();
+        const roleDefaultCabinet = await getStaffRoleDefaultCabinetId();
+        if (!cancelled) setRoleDefaultCabinetId(roleDefaultCabinet);
         const res = await staffMedicalSupplySubDepartmentsApi.getAll();
         let raw = res.data ?? [];
         if (allowed != null && Array.isArray(allowed) && allowed.length > 0) {
@@ -248,6 +303,7 @@ export default function ReturnMedicalSuppliesPage() {
         } else if (allowed != null && Array.isArray(allowed) && allowed.length === 0) {
           raw = [];
         }
+        if (cancelled) return;
         setSubDepartmentsMaster(
           raw.map((s) => ({
             id: s.id,
@@ -257,17 +313,64 @@ export default function ReturnMedicalSuppliesPage() {
             status: s.status,
           })),
         );
+
+        const deptList = await fetchStaffDepartmentsForFilter({
+          page: 1,
+          limit: 200,
+          allowedDepartmentIds: allowed,
+        });
+        if (cancelled) return;
+
+        const departmentId = resolveStaffInitialDepartmentId({
+          roleDefaultDeptId: roleDefault,
+          allowed,
+          departments: deptList,
+        });
+
+        const start = getTodayDate();
+        if (departmentId) {
+          setFilterDepartmentId(departmentId);
+          const cabinetList = await resolveCabinetsForFilter(departmentId);
+          if (cancelled) return;
+          setCabinets(cabinetList);
+          const cabinetId = pickDefaultCabinetId(cabinetList, roleDefaultCabinet);
+          willReturnAutoCabinetRef.current = departmentId;
+          setFilterCabinetId(cabinetId);
+          setFilterStartDate(start);
+          setFilterEndDate(start);
+          if (!willReturnInitialSearchDoneRef.current) {
+            willReturnInitialSearchDoneRef.current = true;
+            const applied: AppliedWillReturnFilters = {
+              departmentId,
+              cabinetId,
+              subDepartmentId: '',
+              itemCode: '',
+              startDate: start,
+              endDate: start,
+            };
+            setAppliedWillReturnFilters(applied);
+            loadWillReturnItems({
+              department_id: parseInt(departmentId, 10),
+              ...(cabinetId ? { cabinet_id: parseInt(cabinetId, 10) } : {}),
+              start_date: start,
+              end_date: start,
+            });
+          }
+        } else {
+          setFilterStartDate(start);
+          setFilterEndDate(start);
+          if (!willReturnInitialSearchDoneRef.current) {
+            willReturnInitialSearchDoneRef.current = true;
+            loadWillReturnItems({ start_date: start, end_date: start });
+          }
+        }
       } catch {
-        setSubDepartmentsMaster([]);
+        if (!cancelled) setSubDepartmentsMaster([]);
       }
-      setFilterDepartmentId('');
-      setFilterCabinetId('');
-      setFilterSubDepartmentId('');
-      const start = getTodayDate();
-      setFilterStartDate(start);
-      setFilterEndDate(start);
-      loadWillReturnItems({ start_date: start, end_date: start });
     })();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -279,16 +382,15 @@ export default function ReturnMedicalSuppliesPage() {
     async (departmentIdStr: string) => {
       const next = await resolveCabinetsForFilter(departmentIdStr);
       setHistoryCabinets(next);
-      setReturnHistoryCabinetId((prev) => {
-        if (next.length === 0) return '';
-        if (next.length === 1) return String(next[0].id);
-        if (!prev?.trim()) return '';
-        const id = parseInt(prev, 10);
-        if (Number.isNaN(id)) return '';
-        return next.some((c) => c.id === id) ? prev : '';
-      });
+      applyDefaultCabinet(
+        departmentIdStr,
+        next,
+        returnHistoryCabinetId,
+        historyAutoCabinetRef,
+        setReturnHistoryCabinetId,
+      );
     },
-    [resolveCabinetsForFilter],
+    [resolveCabinetsForFilter, applyDefaultCabinet, returnHistoryCabinetId],
   );
 
   useEffect(() => {
@@ -297,25 +399,38 @@ export default function ReturnMedicalSuppliesPage() {
 
   const handleWillReturnFilterReset = () => {
     const start = getTodayDate();
-    const reset: AppliedWillReturnFilters = {
-      departmentId: '',
-      cabinetId: '',
-      subDepartmentId: '',
-      itemCode: '',
-      startDate: start,
-      endDate: start,
-    };
-    setFilterDepartmentId('');
-    setFilterCabinetId('');
-    setFilterSubDepartmentId('');
-    setFilterItemCode('');
-    setFilterStartDate(start);
-    setFilterEndDate(start);
-    setAppliedWillReturnFilters(reset);
-    loadWillReturnItems({
-      start_date: start,
-      end_date: start,
-    });
+    const defaultDept = readStaffRoleDefaultDepartmentIdFromStorage();
+    void (async () => {
+      let cabinetId = '';
+      if (defaultDept) {
+        const list = await resolveCabinetsForFilter(defaultDept);
+        cabinetId = pickDefaultCabinetId(list, roleDefaultCabinetId);
+        willReturnAutoCabinetRef.current = defaultDept;
+      } else {
+        willReturnAutoCabinetRef.current = '';
+      }
+      const reset: AppliedWillReturnFilters = {
+        departmentId: defaultDept,
+        cabinetId,
+        subDepartmentId: '',
+        itemCode: '',
+        startDate: start,
+        endDate: start,
+      };
+      setFilterDepartmentId(defaultDept);
+      setFilterCabinetId(cabinetId);
+      setFilterSubDepartmentId('');
+      setFilterItemCode('');
+      setFilterStartDate(start);
+      setFilterEndDate(start);
+      setAppliedWillReturnFilters(reset);
+      loadWillReturnItems({
+        ...(defaultDept ? { department_id: parseInt(defaultDept, 10) } : {}),
+        ...(cabinetId ? { cabinet_id: parseInt(cabinetId, 10) } : {}),
+        start_date: start,
+        end_date: start,
+      });
+    })();
   };
 
   const handleWillReturnSearch = () => {
@@ -491,34 +606,45 @@ export default function ReturnMedicalSuppliesPage() {
 
   const handleReturnHistoryReset = () => {
     const start = getTodayDate();
-    const reset: AppliedReturnHistoryFilters = {
-      dateFrom: start,
-      dateTo: start,
-      reason: 'ALL',
-      departmentCode: '',
-      subDepartmentId: '',
-      cabinetId: '',
-      itemKeyword: '',
-    };
-    setReturnHistoryDateFrom(start);
-    setReturnHistoryDateTo(start);
-    setReturnHistoryReason('ALL');
-    setReturnHistoryDepartmentCode('');
-    setReturnHistorySubDepartmentId('');
-    setReturnHistoryCabinetId('');
-    setReturnHistoryItemKeyword('');
-    setReturnHistoryPage(1);
-    setAppliedHistoryFilters(reset);
-    void fetchReturnHistory({
-      page: 1,
-      dateFrom: start,
-      dateTo: start,
-      reason: 'ALL',
-      departmentCode: '',
-      subDepartmentId: '',
-      cabinetId: '',
-      itemKeyword: '',
-    });
+    const defaultDept = readStaffRoleDefaultDepartmentIdFromStorage();
+    void (async () => {
+      let cabinetId = '';
+      if (defaultDept) {
+        const list = await resolveCabinetsForFilter(defaultDept);
+        cabinetId = pickDefaultCabinetId(list, roleDefaultCabinetId);
+        historyAutoCabinetRef.current = defaultDept;
+      } else {
+        historyAutoCabinetRef.current = '';
+      }
+      const reset: AppliedReturnHistoryFilters = {
+        dateFrom: start,
+        dateTo: start,
+        reason: 'ALL',
+        departmentCode: defaultDept,
+        subDepartmentId: '',
+        cabinetId,
+        itemKeyword: '',
+      };
+      setReturnHistoryDateFrom(start);
+      setReturnHistoryDateTo(start);
+      setReturnHistoryReason('ALL');
+      setReturnHistoryDepartmentCode(defaultDept);
+      setReturnHistorySubDepartmentId('');
+      setReturnHistoryCabinetId(cabinetId);
+      setReturnHistoryItemKeyword('');
+      setReturnHistoryPage(1);
+      setAppliedHistoryFilters(reset);
+      void fetchReturnHistory({
+        page: 1,
+        dateFrom: start,
+        dateTo: start,
+        reason: 'ALL',
+        departmentCode: defaultDept,
+        subDepartmentId: '',
+        cabinetId,
+        itemKeyword: '',
+      });
+    })();
   };
 
   const formatDate = (dateString: string) => formatUtcDateTime(dateString);

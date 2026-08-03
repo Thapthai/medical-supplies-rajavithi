@@ -10,6 +10,11 @@ import {
   clampDepartmentIdString,
   fetchStaffDepartmentsForFilter,
   getStaffAllowedDepartmentIds,
+  getStaffRoleDefaultCabinetId,
+  getStaffRoleDefaultDepartmentId,
+  pickDefaultCabinetId,
+  resolveStaffInitialDepartmentId,
+  sortCabinetsByName,
 } from "@/lib/staffDepartmentScope";
 import { cn } from "@/lib/utils";
 
@@ -78,17 +83,42 @@ export default function FilterSection({
   const [loadingCabinets, setLoadingCabinets] = useState(false);
   /** undefined = ยังไม่รู้ scope, null = ไม่จำกัดแผนก, number[] = เฉพาะแผนกที่ role อนุญาต */
   const allowedDepartmentIdsRef = useRef<number[] | null | undefined>(undefined);
+  const [roleDefaultDeptId, setRoleDefaultDeptId] = useState(
+    () => initialDepartmentId?.trim() || "",
+  );
+  const [roleDefaultReady, setRoleDefaultReady] = useState(false);
+  /** ตู้ Cabinet เริ่มต้นจาก Role via GET /staff/me/departments */
+  const [roleDefaultCabinetId, setRoleDefaultCabinetId] = useState("");
+  const autoCabinetForDeptRef = useRef("");
 
   const [formFilters, setFormFilters] = useState({
     cabinetId: "",
-    departmentId: initialDepartmentId ?? "",
+    departmentId: initialDepartmentId?.trim() || "",
     status: "ALL",
   });
   const [appliedFilters, setAppliedFilters] = useState({
     cabinetId: "",
-    departmentId: initialDepartmentId ?? "",
+    departmentId: initialDepartmentId?.trim() || "",
     status: "ALL",
   });
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [fromApi, cabinetFromApi] = await Promise.all([
+        getStaffRoleDefaultDepartmentId(),
+        getStaffRoleDefaultCabinetId(),
+      ]);
+      if (cancelled) return;
+      const next = fromApi || initialDepartmentId?.trim() || "";
+      setRoleDefaultDeptId(next);
+      setRoleDefaultCabinetId(cabinetFromApi);
+      setRoleDefaultReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [initialDepartmentId]);
 
   useEffect(() => {
     if (initialDepartmentId) {
@@ -132,7 +162,7 @@ export default function FilterSection({
         const deptId = parseInt(departmentIdStr, 10);
         if (Number.isNaN(deptId)) {
           setCabinets([]);
-          return;
+          return [];
         }
         const response = await staffCabinetDepartmentApi.getAll({
           departmentId: deptId,
@@ -152,10 +182,13 @@ export default function FilterSection({
           next = Array.from(uniqueCabinets.values());
         }
       }
+      next = sortCabinetsByName(next);
       setCabinets(next);
+      return next;
     } catch (error) {
       console.error("Failed to load cabinets:", error);
       setCabinets([]);
+      return [];
     } finally {
       setLoadingCabinets(false);
     }
@@ -179,10 +212,18 @@ export default function FilterSection({
         if (cancelled) return;
         setDepartments(list);
 
+        if (!roleDefaultReady) return;
+
+        const nextDept = departmentDisabled
+          ? (initialDepartmentId ?? formFilters.departmentId)
+          : resolveStaffInitialDepartmentId({
+              roleDefaultDeptId: roleDefaultDeptId.trim(),
+              allowed,
+              departments: list,
+            });
+
         setFormFilters((prev) => {
-          const nextDept = departmentDisabled
-            ? (initialDepartmentId ?? prev.departmentId)
-            : clampDepartmentIdString(prev.departmentId || initialDepartmentId, allowed, "");
+          if (prev.departmentId === nextDept) return prev;
           return {
             ...prev,
             departmentId: nextDept,
@@ -198,11 +239,35 @@ export default function FilterSection({
     return () => {
       cancelled = true;
     };
-  }, [departmentDisabled, initialDepartmentId]);
+  }, [departmentDisabled, initialDepartmentId, roleDefaultReady, roleDefaultDeptId]);
 
   useEffect(() => {
     void resolveCabinets(formFilters.departmentId);
   }, [formFilters.departmentId, resolveCabinets]);
+
+  useEffect(() => {
+    if (loadingCabinets) return;
+    const deptId = formFilters.departmentId.trim();
+    if (!deptId) {
+      autoCabinetForDeptRef.current = "";
+      return;
+    }
+
+    const current = formFilters.cabinetId.trim();
+    const currentOk = current !== "" && cabinets.some((c) => String(c.id) === current);
+    if (currentOk) {
+      autoCabinetForDeptRef.current = deptId;
+      return;
+    }
+    if (cabinets.length === 0) return;
+    if (autoCabinetForDeptRef.current === deptId && current === "") return;
+
+    const defaultCabinetId = pickDefaultCabinetId(cabinets, roleDefaultCabinetId);
+    autoCabinetForDeptRef.current = deptId;
+    setFormFilters((prev) =>
+      prev.cabinetId === defaultCabinetId ? prev : { ...prev, cabinetId: defaultCabinetId },
+    );
+  }, [cabinets, loadingCabinets, formFilters.departmentId, formFilters.cabinetId, roleDefaultCabinetId]);
 
   useEffect(() => {
     if (formFilters.cabinetId && cabinets.length > 0) {
@@ -222,15 +287,29 @@ export default function FilterSection({
     const allowed = allowedDepartmentIdsRef.current;
     const defaultDept = departmentDisabled
       ? (initialDepartmentId ?? "")
-      : clampDepartmentIdString("", allowed, "");
-    const defaultFilters = {
-      cabinetId: "",
-      departmentId: defaultDept,
-      status: "ALL",
-    };
-    setFormFilters(defaultFilters);
-    setAppliedFilters(defaultFilters);
-    onReset?.();
+      : resolveStaffInitialDepartmentId({
+          roleDefaultDeptId: roleDefaultDeptId.trim(),
+          allowed,
+          departments,
+        });
+    void (async () => {
+      let cabinetId = "";
+      if (defaultDept) {
+        const list = await resolveCabinets(defaultDept);
+        cabinetId = pickDefaultCabinetId(list, roleDefaultCabinetId);
+        autoCabinetForDeptRef.current = defaultDept;
+      } else {
+        autoCabinetForDeptRef.current = "";
+      }
+      const defaultFilters = {
+        cabinetId,
+        departmentId: defaultDept,
+        status: "ALL",
+      };
+      setFormFilters(defaultFilters);
+      setAppliedFilters(defaultFilters);
+      onReset?.();
+    })();
   };
 
   const hasActiveFilters =

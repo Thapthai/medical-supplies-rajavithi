@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DispensedItemsApi } from '@/lib/staffApi/dispensedItemsApi';
+import { readStaffRoleDefaultDepartmentIdFromStorage } from '@/lib/staffDepartmentScope';
 import { toast } from 'sonner';
 import { Package } from 'lucide-react';
 import FilterSection from './components/FilterSection';
@@ -17,30 +18,29 @@ const getTodayDate = () => {
   return `${year}-${month}-${day}`;
 };
 
+function initialDispenseFilters(): FilterState {
+  return {
+    searchItemCode: '',
+    startDate: getTodayDate(),
+    endDate: getTodayDate(),
+    itemTypeFilter: 'all',
+    departmentId: readStaffRoleDefaultDepartmentIdFromStorage(),
+    subDepartmentId: '',
+    cabinetId: '',
+  };
+}
+
 const GROUPS_PER_PAGE = 10;
 const FETCH_BATCH_LIMIT = 5000;
 
 export default function DispenseFromCabinetPage() {
-  const [loadingList, setLoadingList] = useState(false);
+  const [loadingList, setLoadingList] = useState(true);
   const [dispensedList, setDispensedList] = useState<DispensedItem[]>([]);
-  const [filters, setFilters] = useState<FilterState>({
-    searchItemCode: '',
-    startDate: getTodayDate(),
-    endDate: getTodayDate(),
-    itemTypeFilter: 'all',
-    departmentId: '',
-    subDepartmentId: '',
-    cabinetId: '',
-  });
-  const [appliedFilters, setAppliedFilters] = useState<FilterState>({
-    searchItemCode: '',
-    startDate: getTodayDate(),
-    endDate: getTodayDate(),
-    itemTypeFilter: 'all',
-    departmentId: '',
-    subDepartmentId: '',
-    cabinetId: '',
-  });
+  const [filters, setFilters] = useState<FilterState>(initialDispenseFilters);
+  const [appliedFilters, setAppliedFilters] = useState<FilterState>(initialDispenseFilters);
+  /** รอ FilterSection ตั้งค่า Division/ตู้เริ่มต้นก่อนโหลดครั้งแรก */
+  const [filtersBootstrapped, setFiltersBootstrapped] = useState(false);
+  const initialDepartmentId = useState(() => readStaffRoleDefaultDepartmentIdFromStorage())[0];
 
   const [currentPage, setCurrentPage] = useState(1);
   const [totalRawItems, setTotalRawItems] = useState(0);
@@ -53,11 +53,8 @@ export default function DispenseFromCabinetPage() {
   );
 
   const fetchDispensedList = useCallback(
-    async (
-      overrideFilters?: FilterState,
-      opts?: { resetPage?: boolean; silent?: boolean },
-    ) => {
-      const activeFilters = overrideFilters ?? filters;
+    async (opts?: { resetPage?: boolean; silent?: boolean }) => {
+      const activeFilters = appliedFilters;
       try {
         setLoadingList(true);
         const params: Record<string, string | number> = {
@@ -130,45 +127,40 @@ export default function DispenseFromCabinetPage() {
         setLoadingList(false);
       }
     },
-    [filters],
+    [appliedFilters],
   );
 
   useEffect(() => {
     setCurrentPage((p) => Math.min(p, Math.max(1, totalPages)));
   }, [totalPages]);
 
-  const initialFetchDone = useRef(false);
   useEffect(() => {
-    if (initialFetchDone.current) return;
-    initialFetchDone.current = true;
-    void fetchDispensedList(undefined, { resetPage: true, silent: true });
-  }, [fetchDispensedList]);
+    if (!filtersBootstrapped) return;
+    void fetchDispensedList({ resetPage: true, silent: true });
+  }, [fetchDispensedList, filtersBootstrapped]);
 
-  const handleSearch = () => {
-    setAppliedFilters(filters);
+  const onSearch = useCallback((next: FilterState) => {
+    setFilters(next);
+    setAppliedFilters(next);
     setCurrentPage(1);
-    void fetchDispensedList(undefined, { resetPage: true });
-  };
+    setFiltersBootstrapped(true);
+  }, []);
 
-  const handleClearSearch = () => {
-    const clearedFilters: FilterState = {
-      searchItemCode: '',
-      startDate: getTodayDate(),
-      endDate: getTodayDate(),
-      itemTypeFilter: 'all',
-      departmentId: '',
-      subDepartmentId: '',
-      cabinetId: '',
-    };
-    setFilters(clearedFilters);
-    setAppliedFilters(clearedFilters);
-    setCurrentPage(1);
-    void fetchDispensedList(clearedFilters, { resetPage: true, silent: true });
-  };
-
-  const handleFilterChange = (key: keyof FilterState, value: string) => {
+  const onFilterChange = useCallback((key: keyof FilterState, value: string) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
-  };
+  }, []);
+
+  const onClear = useCallback((overrides?: Partial<FilterState>) => {
+    const reset = { ...initialDispenseFilters(), ...overrides };
+    setFilters(reset);
+    setAppliedFilters(reset);
+    setCurrentPage(1);
+    setFiltersBootstrapped(true);
+  }, []);
+
+  const onRefresh = useCallback(() => {
+    void fetchDispensedList({ resetPage: false, silent: true });
+  }, [fetchDispensedList]);
 
   const handleExportReport = async (format: 'excel' | 'pdf') => {
     if (!filters.departmentId?.trim()) {
@@ -224,11 +216,12 @@ export default function DispenseFromCabinetPage() {
         <FilterSection
           filters={filters}
           appliedFilters={appliedFilters}
-          onFilterChange={handleFilterChange}
-          onSearch={handleSearch}
-          onClear={handleClearSearch}
-          onRefresh={() => fetchDispensedList(undefined, { resetPage: false, silent: true })}
+          onFilterChange={onFilterChange}
+          onSearch={onSearch}
+          onClear={onClear}
+          onRefresh={onRefresh}
           loading={loadingList}
+          initialDepartmentId={initialDepartmentId}
           departmentDisabled={false}
         />
 

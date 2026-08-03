@@ -455,8 +455,8 @@ export default function ProfilePage() {
 
   return (
     <ProtectedRoute>
-      <AppLayout>
-        <div className="max-w-5xl mx-auto">
+      <AppLayout fullWidth>
+        {/* <div className="max-w-5xl mx-auto"> */}
           <ProfileHeader userName={user?.name} />
 
           <div className="space-y-4 sm:space-y-6">
@@ -571,7 +571,7 @@ export default function ProfilePage() {
             onConfirm={handleConfirmProfileUpdate}
             onCancel={handleCancelProfileUpdate}
           />
-        </div>
+        {/* </div> */}
       </AppLayout>
     </ProtectedRoute>
   );

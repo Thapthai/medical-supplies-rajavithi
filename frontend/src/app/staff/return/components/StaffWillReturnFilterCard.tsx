@@ -14,6 +14,7 @@ import {
   clampDepartmentIdString,
   fetchStaffDepartmentsForFilter,
   getStaffAllowedDepartmentIds,
+  getStaffRoleDefaultDepartmentId,
 } from '@/lib/staffDepartmentScope';
 import type { SubDepartmentOption } from '@/app/admin/medical-supplies/components/MedicalSuppliesSearchFilters';
 
@@ -94,6 +95,40 @@ export default function StaffWillReturnFilterCard({
   const [loadingDepartments, setLoadingDepartments] = useState(true);
   const allowedDepartmentIdsRef = useRef<number[] | null | undefined>(undefined);
   const [canPickAllRoleDepartments, setCanPickAllRoleDepartments] = useState(false);
+  const [roleDefaultDeptId, setRoleDefaultDeptId] = useState('');
+  const departmentIdRef = useRef(departmentId);
+  departmentIdRef.current = departmentId;
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const fromApi = await getStaffRoleDefaultDepartmentId();
+      if (cancelled) return;
+      setRoleDefaultDeptId(fromApi);
+      if (fromApi && !departmentIdRef.current.trim() && !departmentLocked) {
+        onDepartmentChange(fromApi);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [departmentLocked, onDepartmentChange]);
+
+  useEffect(() => {
+    const d = roleDefaultDeptId.trim();
+    if (departmentLocked) {
+      if (departmentId !== d) {
+        onDepartmentChange(d);
+        onCabinetChange('');
+        onSubDepartmentChange('');
+      }
+      return;
+    }
+    if (!d) return;
+    if (!departmentId.trim()) {
+      onDepartmentChange(d);
+    }
+  }, [roleDefaultDeptId, departmentLocked, departmentId, onDepartmentChange, onCabinetChange, onSubDepartmentChange]);
 
   const roleScopeDivisionSummary = useMemo(
     () => (canPickAllRoleDepartments ? buildRoleScopeDivisionSummary(departments) : ''),

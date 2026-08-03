@@ -27,6 +27,10 @@ export type StaffRoleRow = {
   name: string;
   description: string | null;
   is_active: boolean;
+  default_department_id?: number | null;
+  default_department_name?: string | null;
+  default_cabinet_id?: number | null;
+  default_cabinet_name?: string | null;
 };
 
 function messageFromAxios(err: unknown): string | undefined {

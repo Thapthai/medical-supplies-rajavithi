@@ -159,11 +159,19 @@ export class StaffService {
     return role.id;
   }
 
-  async findAllStaffUsers(params?: { page?: number; limit?: number; keyword?: string }) {
+  async findAllStaffUsers(params?: {
+    page?: number;
+    limit?: number;
+    keyword?: string;
+    role_id?: number;
+  }) {
     const page = Math.max(1, params?.page ?? 1);
-    const limit = Math.min(100, Math.max(1, params?.limit ?? 50));
+    const limit = Math.min(5000, Math.max(1, params?.limit ?? 50));
     const skip = (page - 1) * limit;
     const where: Record<string, unknown> = { is_admin: false };
+    if (params?.role_id != null && Number.isInteger(params.role_id) && params.role_id >= 1) {
+      where.role_id = params.role_id;
+    }
     if (params?.keyword?.trim()) {
       const k = params.keyword.trim();
       Object.assign(where, {
@@ -385,14 +393,56 @@ export class StaffService {
     const list = await this.prisma.staffRole.findMany({
       where: activeOnly ? { is_active: true } : undefined,
       orderBy: { code: 'asc' },
+      include: {
+        defaultDepartment: { select: { ID: true, DepName: true, DepName2: true } },
+        defaultCabinet: { select: { id: true, cabinet_name: true, cabinet_code: true } },
+      },
     });
-    return { success: true, data: list };
+    const data = list.map((r) => ({
+      id: r.id,
+      code: r.code,
+      name: r.name,
+      description: r.description,
+      is_active: r.is_active,
+      default_department_id: r.default_department_id,
+      default_department_name:
+        r.defaultDepartment?.DepName ?? r.defaultDepartment?.DepName2 ?? null,
+      default_cabinet_id: r.default_cabinet_id,
+      default_cabinet_name:
+        r.defaultCabinet?.cabinet_name ?? r.defaultCabinet?.cabinet_code ?? null,
+      created_at: r.created_at,
+      updated_at: r.updated_at,
+    }));
+    return { success: true, data };
   }
 
   async findOneStaffRole(id: number) {
-    const role = await this.prisma.staffRole.findUnique({ where: { id } });
+    const role = await this.prisma.staffRole.findUnique({
+      where: { id },
+      include: {
+        defaultDepartment: { select: { ID: true, DepName: true, DepName2: true } },
+        defaultCabinet: { select: { id: true, cabinet_name: true, cabinet_code: true } },
+      },
+    });
     if (!role) throw new NotFoundException('Staff role not found');
-    return { success: true, data: role };
+    return {
+      success: true,
+      data: {
+        id: role.id,
+        code: role.code,
+        name: role.name,
+        description: role.description,
+        is_active: role.is_active,
+        default_department_id: role.default_department_id,
+        default_department_name:
+          role.defaultDepartment?.DepName ?? role.defaultDepartment?.DepName2 ?? null,
+        default_cabinet_id: role.default_cabinet_id,
+        default_cabinet_name:
+          role.defaultCabinet?.cabinet_name ?? role.defaultCabinet?.cabinet_code ?? null,
+        created_at: role.created_at,
+        updated_at: role.updated_at,
+      },
+    };
   }
 
   private normalizeHierarchyLevel(v: unknown): number {
@@ -413,6 +463,31 @@ export class StaffService {
     return `STF-${String(max + 1).padStart(3, '0')}`;
   }
 
+  /** ตรวจว่าตู้มีอยู่ และ (ถ้ามี dept) ผูก ACTIVE กับ Division นั้น */
+  private async assertDefaultCabinet(
+    cabinetId: number,
+    departmentId: number | null | undefined,
+  ): Promise<void> {
+    const cabinet = await this.prisma.cabinet.findUnique({
+      where: { id: cabinetId },
+      select: { id: true },
+    });
+    if (!cabinet) throw new BadRequestException('ไม่พบตู้ Cabinet ที่ระบุ');
+    if (departmentId != null && departmentId > 0) {
+      const link = await this.prisma.cabinetDepartment.findFirst({
+        where: {
+          cabinet_id: cabinetId,
+          department_id: departmentId,
+          status: 'ACTIVE',
+        },
+        select: { id: true },
+      });
+      if (!link) {
+        throw new BadRequestException('ตู้ที่เลือกต้องผูก ACTIVE กับ Division เริ่มต้น');
+      }
+    }
+  }
+
   async createStaffRole(dto: CreateStaffRoleDto) {
     let code = dto.code?.trim() ?? '';
     if (!code) {
@@ -420,12 +495,39 @@ export class StaffService {
     }
     const existing = await this.prisma.staffRole.findUnique({ where: { code } });
     if (existing) throw new BadRequestException('รหัส Role นี้มีอยู่แล้ว');
+
+    let defaultDepartmentId: number | null = null;
+    if (dto.default_department_id != null) {
+      const deptId = Number(dto.default_department_id);
+      if (!Number.isInteger(deptId) || deptId < 1) {
+        throw new BadRequestException('default_department_id ไม่ถูกต้อง');
+      }
+      const dept = await this.prisma.department.findUnique({
+        where: { ID: deptId },
+        select: { ID: true },
+      });
+      if (!dept) throw new BadRequestException('ไม่พบ Division ที่ระบุ');
+      defaultDepartmentId = deptId;
+    }
+
+    let defaultCabinetId: number | null = null;
+    if (dto.default_cabinet_id != null) {
+      const cabId = Number(dto.default_cabinet_id);
+      if (!Number.isInteger(cabId) || cabId < 1) {
+        throw new BadRequestException('default_cabinet_id ไม่ถูกต้อง');
+      }
+      await this.assertDefaultCabinet(cabId, defaultDepartmentId);
+      defaultCabinetId = cabId;
+    }
+
     const role = await this.prisma.staffRole.create({
       data: {
         code,
         name: dto.name.trim(),
         description: dto.description?.trim() ?? null,
         is_active: dto.is_active ?? true,
+        default_department_id: defaultDepartmentId,
+        default_cabinet_id: defaultCabinetId,
       },
     });
     await this.prisma.staffRolePermission.upsert({
@@ -445,12 +547,93 @@ export class StaffService {
   async updateStaffRole(id: number, dto: UpdateStaffRoleDto) {
     const role = await this.prisma.staffRole.findUnique({ where: { id } });
     if (!role) throw new NotFoundException('Staff role not found');
-    const data: any = {};
+    const data: {
+      name?: string;
+      description?: string | null;
+      is_active?: boolean;
+      default_department_id?: number | null;
+      default_cabinet_id?: number | null;
+    } = {};
     if (dto.name !== undefined) data.name = dto.name.trim();
     if (dto.description !== undefined) data.description = dto.description?.trim() ?? null;
     if (dto.is_active !== undefined) data.is_active = dto.is_active;
-    await this.prisma.staffRole.update({ where: { id }, data });
-    return { success: true, message: 'Role updated' };
+
+    let nextDeptId =
+      dto.default_department_id !== undefined
+        ? dto.default_department_id
+        : role.default_department_id;
+
+    if (dto.default_department_id !== undefined) {
+      if (dto.default_department_id === null) {
+        data.default_department_id = null;
+        nextDeptId = null;
+        if (dto.default_cabinet_id === undefined) {
+          data.default_cabinet_id = null;
+        }
+      } else {
+        const deptId = Number(dto.default_department_id);
+        if (!Number.isInteger(deptId) || deptId < 1) {
+          throw new BadRequestException('default_department_id ไม่ถูกต้อง');
+        }
+        const dept = await this.prisma.department.findUnique({
+          where: { ID: deptId },
+          select: { ID: true },
+        });
+        if (!dept) throw new BadRequestException('ไม่พบ Division ที่ระบุ');
+        data.default_department_id = deptId;
+        nextDeptId = deptId;
+      }
+    }
+
+    if (dto.default_cabinet_id !== undefined) {
+      if (dto.default_cabinet_id === null) {
+        data.default_cabinet_id = null;
+      } else {
+        const cabId = Number(dto.default_cabinet_id);
+        if (!Number.isInteger(cabId) || cabId < 1) {
+          throw new BadRequestException('default_cabinet_id ไม่ถูกต้อง');
+        }
+        await this.assertDefaultCabinet(cabId, nextDeptId);
+        data.default_cabinet_id = cabId;
+      }
+    } else if (
+      dto.default_department_id !== undefined &&
+      dto.default_department_id !== null &&
+      role.default_cabinet_id != null &&
+      data.default_cabinet_id === undefined
+    ) {
+      try {
+        await this.assertDefaultCabinet(role.default_cabinet_id, nextDeptId);
+      } catch {
+        data.default_cabinet_id = null;
+      }
+    }
+
+    const updated = await this.prisma.staffRole.update({
+      where: { id },
+      data,
+      include: {
+        defaultDepartment: { select: { ID: true, DepName: true, DepName2: true } },
+        defaultCabinet: { select: { id: true, cabinet_name: true, cabinet_code: true } },
+      },
+    });
+    return {
+      success: true,
+      message: 'Role updated',
+      data: {
+        id: updated.id,
+        code: updated.code,
+        name: updated.name,
+        description: updated.description,
+        is_active: updated.is_active,
+        default_department_id: updated.default_department_id,
+        default_department_name:
+          updated.defaultDepartment?.DepName ?? updated.defaultDepartment?.DepName2 ?? null,
+        default_cabinet_id: updated.default_cabinet_id,
+        default_cabinet_name:
+          updated.defaultCabinet?.cabinet_name ?? updated.defaultCabinet?.cabinet_code ?? null,
+      },
+    };
   }
 
   async deleteStaffRole(id: number) {
@@ -615,6 +798,22 @@ export class StaffService {
       throw new UnauthorizedException('ต้องล็อกอิน Staff (Bearer token หรือ client_id)');
     }
 
+    const role = await this.prisma.staffRole.findUnique({
+      where: { id: staff.role_id },
+      select: {
+        default_department_id: true,
+        default_cabinet_id: true,
+        defaultDepartment: { select: { ID: true, DepName: true, DepName2: true } },
+        defaultCabinet: { select: { id: true, cabinet_name: true, cabinet_code: true } },
+      },
+    });
+    const defaultDepartmentId = role?.default_department_id ?? null;
+    const defaultDepartmentName =
+      role?.defaultDepartment?.DepName ?? role?.defaultDepartment?.DepName2 ?? null;
+    const defaultCabinetId = role?.default_cabinet_id ?? null;
+    const defaultCabinetName =
+      role?.defaultCabinet?.cabinet_name ?? role?.defaultCabinet?.cabinet_code ?? null;
+
     const departmentSelect = {
       ID: true,
       DepName: true,
@@ -656,6 +855,10 @@ export class StaffService {
           unrestricted: true,
           staff_user_id: staff.id,
           role_id: staff.role_id,
+          default_department_id: defaultDepartmentId,
+          default_department_name: defaultDepartmentName,
+          default_cabinet_id: defaultCabinetId,
+          default_cabinet_name: defaultCabinetName,
           departments,
         },
       };
@@ -667,6 +870,10 @@ export class StaffService {
         unrestricted: false,
         staff_user_id: staff.id,
         role_id: staff.role_id,
+        default_department_id: defaultDepartmentId,
+        default_department_name: defaultDepartmentName,
+        default_cabinet_id: defaultCabinetId,
+        default_cabinet_name: defaultCabinetName,
         departments,
       },
     };

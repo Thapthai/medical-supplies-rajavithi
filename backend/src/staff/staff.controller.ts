@@ -43,11 +43,17 @@ export class StaffUsersController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('keyword') keyword?: string,
+    @Query('role_id') role_id?: string,
   ) {
+    const roleIdParsed =
+      role_id != null && role_id !== '' && !Number.isNaN(parseInt(role_id, 10))
+        ? parseInt(role_id, 10)
+        : undefined;
     const params = {
       page: page ? parseInt(page, 10) : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
       keyword: keyword?.trim() || undefined,
+      role_id: roleIdParsed,
     };
     return this.staffService.findAllStaffUsers(params);
   }

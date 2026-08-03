@@ -19,6 +19,8 @@ import {
   clampDepartmentIdString,
   fetchStaffDepartmentsForFilter,
   getStaffAllowedDepartmentIds,
+  getStaffRoleDefaultDepartmentId,
+  resolveStaffInitialDepartmentId,
 } from "@/lib/staffDepartmentScope";
 import { staffMedicalSupplySubDepartmentsApi } from "@/lib/staffApi/medicalSupplySubDepartmentsApi";
 
@@ -49,10 +51,11 @@ interface MedicalSuppliesSearchFiltersProps {
   activeFilters: MedicalSuppliesSearchFilterFields;
   onPatchFormFilters: (patch: Partial<MedicalSuppliesSearchFilterFields>) => void;
   loading: boolean;
-  onSearch: () => void;
+  onSearch: (override?: Partial<MedicalSuppliesSearchFilterFields>) => void;
   onReset: () => void;
   onReload: () => void;
   departmentDisabled?: boolean;
+  initialAutoSearch?: boolean;
 }
 
 function buildRoleScopeDivisionSummary(depts: DepartmentOption[]): string {
@@ -71,6 +74,7 @@ export default function MedicalSuppliesSearchFilters({
   onReset,
   onReload,
   departmentDisabled,
+  initialAutoSearch = true,
 }: MedicalSuppliesSearchFiltersProps) {
   const patch = onPatchFormFilters;
 
@@ -79,6 +83,11 @@ export default function MedicalSuppliesSearchFilters({
   const [loadingDepartments, setLoadingDepartments] = useState(true);
   const allowedDepartmentIdsRef = useRef<number[] | null | undefined>(undefined);
   const [canPickAllRoleDepartments, setCanPickAllRoleDepartments] = useState(false);
+  const initialSearchDoneRef = useRef(false);
+  const [roleDefaultDeptId, setRoleDefaultDeptId] = useState("");
+  const [roleDefaultReady, setRoleDefaultReady] = useState(false);
+  const formFiltersRef = useRef(formFilters);
+  formFiltersRef.current = formFilters;
 
   const [departmentSearch, setDepartmentSearch] = useState("");
   const [departmentDropdownOpen, setDepartmentDropdownOpen] = useState(false);
@@ -139,6 +148,36 @@ export default function MedicalSuppliesSearchFilters({
     return code;
   };
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const fromApi = await getStaffRoleDefaultDepartmentId();
+      if (cancelled) return;
+      setRoleDefaultDeptId(fromApi);
+      setRoleDefaultReady(true);
+      if (fromApi && !formFiltersRef.current.departmentCode.trim()) {
+        patch({ departmentCode: fromApi });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [patch]);
+
+  useEffect(() => {
+    const d = roleDefaultDeptId.trim();
+    if (departmentDisabled) {
+      if (formFilters.departmentCode !== d) {
+        patch({ departmentCode: d, usageType: "" });
+      }
+      return;
+    }
+    if (!d) return;
+    if (!formFilters.departmentCode.trim()) {
+      patch({ departmentCode: d });
+    }
+  }, [roleDefaultDeptId, departmentDisabled, formFilters.departmentCode, patch]);
+
   const loadDepartments = useCallback(async (keyword?: string) => {
     try {
       setLoadingDepartments(true);
@@ -182,6 +221,44 @@ export default function MedicalSuppliesSearchFilters({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- โหลด scope ครั้งแรก + clamp
   }, [departmentDisabled, loadDepartments]);
+
+  useEffect(() => {
+    if (!initialAutoSearch) return;
+    if (initialSearchDoneRef.current) return;
+    if (loadingDepartments) return;
+    if (!roleDefaultReady) return;
+
+    let cancelled = false;
+    (async () => {
+      const allowed = allowedDepartmentIdsRef.current;
+      if (allowed === undefined) return;
+
+      const departmentCode = resolveStaffInitialDepartmentId({
+        roleDefaultDeptId: roleDefaultDeptId.trim(),
+        allowed,
+        departments,
+      });
+
+      if (cancelled) return;
+      initialSearchDoneRef.current = true;
+      const current = formFiltersRef.current;
+      const next = { ...current, departmentCode, usageType: "" };
+      patch({ departmentCode, usageType: "" });
+      onSearch(next);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    initialAutoSearch,
+    loadingDepartments,
+    roleDefaultReady,
+    roleDefaultDeptId,
+    departments,
+    patch,
+    onSearch,
+  ]);
 
   useEffect(() => {
     (async () => {

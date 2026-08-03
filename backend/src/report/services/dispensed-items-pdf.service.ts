@@ -225,19 +225,17 @@ export class DispensedItemsPdfService {
           for (const group of groups) {
             const qtyDisplay = formatQtyWithMainUnitForReport(group.totalQty, group.items[0] ?? {});
             const g0 = group.items[0];
+            /** แถวสรุป: ลำดับ + รหัส + ชื่อ + รวมจำนวน + Division ที่ตั้งตู้ */
             const groupCellTexts = [
               String(rowNum),
               group.itemcode ?? '-',
               group.itemname ?? '-',
               qtyDisplay,
-              formatReportDateTimeUtc(group.dispenseTime),
+              '',
               g0?.departmentName ?? '-',
-              g0?.borrowDepartmentName?.trim() ? g0.borrowDepartmentName : '-',
-              borrowRemarkCell(g0 ?? {}),
-              (() => {
-                const n = g0?.cabinetUserName?.trim();
-                return n && n !== 'ไม่ระบุ' ? n : '-';
-              })(),
+              '',
+              '',
+              '',
             ];
             doc.fontSize(12).font(finalFontBoldName);
             const groupCellHeights = groupCellTexts.map((text, i) => {
@@ -269,7 +267,7 @@ export class DispensedItemsPdfService {
             doc.y = groupRowY + groupRowHeight;
             doc.fontSize(13).font(finalFontName).fillColor('#000000');
 
-            group.items.forEach((item, subIdx) => {
+            group.items.forEach((item) => {
               const cellTexts = [
                 '',
                 item?.itemcode ?? '-',

@@ -52,21 +52,29 @@ model User {
 }
 
 model StaffRole {
-  id          Int      @id @default(autoincrement())
-  code        String   @unique // e.g. IT-001, WH-001, it2, warehouse2
-  name        String // 'IT 1', 'IT 2', 'Warehouse 1', etc.
-  description String?  @db.Text // Description of the role
-  is_active   Boolean  @default(true) @map("is_active")
-  created_at  DateTime @default(dbgenerated("NOW()")) @map("created_at")
-  updated_at  DateTime @updatedAt @map("updated_at")
+  id                     Int      @id @default(autoincrement())
+  code                   String   @unique // e.g. IT-001, WH-001, it2, warehouse2
+  name                   String // 'IT 1', 'IT 2', 'Warehouse 1', etc.
+  description            String?  @db.Text // Description of the role
+  is_active              Boolean  @default(true) @map("is_active")
+  /// Division หลักที่เป็นค่าเริ่มต้นของฟิลเตอร์ (เช่น หน้า Staff Items)
+  default_department_id  Int?     @map("default_department_id")
+  /// ตู้ Cabinet เริ่มต้นของฟิลเตอร์ (ควรผูก ACTIVE กับ default_department)
+  default_cabinet_id     Int?     @map("default_cabinet_id")
+  created_at             DateTime @default(dbgenerated("NOW()")) @map("created_at")
+  updated_at             DateTime @updatedAt @map("updated_at")
 
   // Relations
-  rolePermissions StaffRolePermission[]
+  rolePermissions     StaffRolePermission[]
+  defaultDepartment   Department?           @relation("StaffRoleDefaultDepartment", fields: [default_department_id], references: [ID], onDelete: SetNull)
+  defaultCabinet      cabinet?              @relation("StaffRoleDefaultCabinet", fields: [default_cabinet_id], references: [id], onDelete: SetNull)
   /// ว่าง = role นี้เห็นข้อมูลทุกแผนกหลัก; มีแถว = เห็นเฉพาะแผนกหลักที่ระบุ (หลายแถวได้)
-  users           User[]
+  users               User[]
 
   @@index([code], name: "idx_code")
   @@index([is_active], name: "idx_is_active")
+  @@index([default_department_id], name: "idx_default_department_id")
+  @@index([default_cabinet_id], name: "idx_default_cabinet_id")
   @@map("app_staff_roles")
 }
 
@@ -663,6 +671,7 @@ model Department {
   staffPermissionDepartments  StaffPermissionDepartment[]
   itemDepartments             ItemDepartments[]
   departmentDispenseDocuments DepartmentDispenseDocument[]
+  staffRolesAsDefault         StaffRole[]                  @relation("StaffRoleDefaultDepartment")
 
   @@map("department")
 }
@@ -683,6 +692,7 @@ model cabinet {
   cabinetItemSettings     CabinetItemSetting[]
   itemSlotInCabinet       ItemSlotInCabinet[]
   cabinetSlotLocations    CabinetSlotLocation[]
+  staffRolesAsDefault     StaffRole[]              @relation("StaffRoleDefaultCabinet")
 
   @@map("app_cabinets")
 }

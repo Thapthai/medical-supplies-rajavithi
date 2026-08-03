@@ -1,8 +1,5 @@
 import type { DispensedItem } from '@/app/admin/dispense-from-cabinet/types';
 
-export const DISPENSED_GROUP_TIME_TOLERANCE_SEC = 3;
-const TOLERANCE_MS = DISPENSED_GROUP_TIME_TOLERANCE_SEC * 1000;
-
 export interface DispensedGroup {
   key: string;
   itemcode: string;
@@ -12,56 +9,40 @@ export interface DispensedGroup {
   totalQty: number;
 }
 
-/** จัดกลุ่มรายการเบิก — เรียงเวลา DESC ให้ตรงกับ backend ORDER BY */
+function timeMs(v?: string): number {
+  const t = new Date(v ?? 0).getTime();
+  return Number.isFinite(t) ? t : 0;
+}
+
+/** จัดกลุ่มรายการเบิกตามรหัสอุปกรณ์ — รายการในกลุ่มเรียงเวลา DESC */
 export function buildDispensedGroups(items: DispensedItem[]): DispensedGroup[] {
   if (items.length === 0) return [];
-  const sorted = [...items].sort((a, b) => {
-    const tA = new Date(a.modifyDate).getTime();
-    const tB = new Date(b.modifyDate).getTime();
-    return tB - tA;
-  });
+
+  const byCode = new Map<string, DispensedItem[]>();
+  for (const item of items) {
+    const code = (item.itemcode ?? '').trim() || '-';
+    const list = byCode.get(code);
+    if (list) list.push(item);
+    else byCode.set(code, [item]);
+  }
 
   const groups: DispensedGroup[] = [];
-  let current: DispensedItem[] = [];
-  let groupStartTime = 0;
-
-  for (const item of sorted) {
-    const t = new Date(item.modifyDate).getTime();
-    if (current.length === 0) {
-      current = [item];
-      groupStartTime = t;
-    } else {
-      const sameItem = (item.itemcode ?? '') === (current[0].itemcode ?? '');
-      const withinWindow = groupStartTime - t <= TOLERANCE_MS;
-      if (sameItem && withinWindow) {
-        current.push(item);
-      } else {
-        if (current.length > 0) {
-          const totalQty = current.reduce((sum, i) => sum + (i.qty ?? 1), 0);
-          groups.push({
-            key: `${current[0].itemcode}_${current[0].RowID}_${groupStartTime}`,
-            itemcode: current[0].itemcode ?? '',
-            itemname: current[0].itemname ?? current[0].itemcode ?? '',
-            dispenseTime: current[0].modifyDate,
-            items: current,
-            totalQty,
-          });
-        }
-        current = [item];
-        groupStartTime = t;
-      }
-    }
-  }
-  if (current.length > 0) {
-    const totalQty = current.reduce((sum, i) => sum + (i.qty ?? 1), 0);
+  for (const [itemcode, groupItems] of byCode) {
+    const sortedItems = [...groupItems].sort(
+      (a, b) => timeMs(b.modifyDate) - timeMs(a.modifyDate),
+    );
+    const totalQty = sortedItems.reduce((sum, i) => sum + (i.qty ?? 1), 0);
+    const first = sortedItems[0];
     groups.push({
-      key: `${current[0].itemcode}_${current[0].RowID}_${groupStartTime}`,
-      itemcode: current[0].itemcode ?? '',
-      itemname: current[0].itemname ?? current[0].itemcode ?? '',
-      dispenseTime: current[0].modifyDate,
-      items: current,
+      key: itemcode,
+      itemcode,
+      itemname: first?.itemname ?? itemcode,
+      dispenseTime: first?.modifyDate ?? '',
+      items: sortedItems,
       totalQty,
     });
   }
+
+  groups.sort((a, b) => timeMs(b.dispenseTime) - timeMs(a.dispenseTime));
   return groups;
 }

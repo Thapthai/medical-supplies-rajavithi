@@ -18,13 +18,28 @@ import ItemsTable from './components/ItemsTable';
 const FETCH_BATCH_LIMIT = 5000;
 const ITEMS_PER_PAGE = 10;
 
-const defaultFilters: StaffItemsSearchFilters = {
-  searchTerm: '',
-  departmentId: '',
-  cabinetId: '',
-  statusFilter: 'all',
-  keyword: '',
-};
+function readRoleDefaultDepartmentId(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    const raw = localStorage.getItem('staff_user');
+    if (!raw) return '';
+    const u = JSON.parse(raw) as { default_department_id?: number | string | null };
+    const id = Number(u.default_department_id);
+    return Number.isFinite(id) && id > 0 ? String(id) : '';
+  } catch {
+    return '';
+  }
+}
+
+function buildDefaultFilters(): StaffItemsSearchFilters {
+  return {
+    searchTerm: '',
+    departmentId: readRoleDefaultDepartmentId(),
+    cabinetId: '',
+    statusFilter: 'all',
+    keyword: '',
+  };
+}
 
 function isItemVisible(item: Item): boolean {
   const qty = getCabinetQty(item);
@@ -44,7 +59,7 @@ export default function ItemsPage() {
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [reportLoading, setReportLoading] = useState<'excel' | 'pdf' | null>(null);
 
-  const [activeFilters, setActiveFilters] = useState<StaffItemsSearchFilters>(defaultFilters);
+  const [activeFilters, setActiveFilters] = useState<StaffItemsSearchFilters>(buildDefaultFilters);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalRawItems, setTotalRawItems] = useState(0);
 
@@ -192,7 +207,7 @@ export default function ItemsPage() {
 
   const handleResetFilters = () => {
     setItemsFilterKey((k) => k + 1);
-    setActiveFilters(defaultFilters);
+    setActiveFilters(buildDefaultFilters());
     setCurrentPage(1);
     setHasSearched(false);
     setAllItems([]);
@@ -287,6 +302,7 @@ export default function ItemsPage() {
           onRefresh={() => void fetchItems(undefined, { resetPage: false, silent: true })}
           loading={loading}
           activeFilters={activeFilters}
+          initialDepartmentId={readRoleDefaultDepartmentId()}
           departmentDisabled={false}
           initialAutoSearch
         />

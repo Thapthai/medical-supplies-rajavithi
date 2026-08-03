@@ -14,6 +14,7 @@ import {
   clampDepartmentIdString,
   fetchStaffDepartmentsForFilter,
   getStaffAllowedDepartmentIds,
+  getStaffRoleDefaultDepartmentId,
 } from '@/lib/staffDepartmentScope';
 import type { SubDepartmentOption } from '@/app/admin/medical-supplies/components/MedicalSuppliesSearchFilters';
 import { cn } from '@/lib/utils';
@@ -109,6 +110,32 @@ export default function ReturnHistoryFilter({
   const [loadingDepartments, setLoadingDepartments] = useState(true);
   const allowedDepartmentIdsRef = useRef<number[] | null | undefined>(undefined);
   const [canPickAllRoleDepartments, setCanPickAllRoleDepartments] = useState(false);
+  const [roleDefaultDeptId, setRoleDefaultDeptId] = useState('');
+  const departmentCodeRef = useRef(departmentCode);
+  departmentCodeRef.current = departmentCode;
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const fromApi = await getStaffRoleDefaultDepartmentId();
+      if (cancelled) return;
+      setRoleDefaultDeptId(fromApi);
+      if (fromApi && !departmentCodeRef.current.trim()) {
+        onDepartmentChange(fromApi);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [onDepartmentChange]);
+
+  useEffect(() => {
+    const d = roleDefaultDeptId.trim();
+    if (!d) return;
+    if (!departmentCode.trim()) {
+      onDepartmentChange(d);
+    }
+  }, [roleDefaultDeptId, departmentCode, onDepartmentChange]);
 
   const roleScopeDivisionSummary = useMemo(
     () => (canPickAllRoleDepartments ? buildRoleScopeDivisionSummary(departments) : ''),

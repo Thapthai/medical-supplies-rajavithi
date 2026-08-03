@@ -65,7 +65,7 @@ export interface DispensedItemsReportData {
     total_qty: number;
   };
   data: DispensedItemRow[];
-  /** กลุ่มตามรหัสอุปกรณ์และเวลาที่เบิก (±3 วินาที) สำหรับแสดงแถวสรุป + รายการย่อย */
+  /** กลุ่มตามรหัสอุปกรณ์ — แถวสรุป + รายการย่อย */
   groups?: DispensedItemsReportGroup[];
 }
 
@@ -166,24 +166,20 @@ export class DispensedItemsExcelService {
     if (useGroups && data.groups) {
       let rowNum = 1;
       for (const group of data.groups) {
-        // แถวสรุปกลุ่ม (ตรงหน้าเว็บ: ลำดับ, รหัส, ชื่อ, จำนวนชิ้น, วันที่เบิก, แผนก, ชื่อผู้เบิก)
+        /** แถวสรุปกลุ่ม: ลำดับ + รหัส + ชื่อ + รวมจำนวน + Division ที่ตั้งตู้ (คอลัมน์รายละเอียดว่าง) */
         const groupRow = worksheet.getRow(dataRowIndex);
         const qtyDisplay = formatQtyWithMainUnitForReport(group.totalQty, group.items[0] ?? {});
-        const mainRowDispenser = (() => {
-          const n = group.items[0]?.cabinetUserName?.trim();
-          return n && n !== 'ไม่ระบุ' ? n : '-';
-        })();
         const first = group.items[0];
         [
           rowNum,
           group.itemcode,
           group.itemname || '-',
           qtyDisplay,
-          formatReportDateTimeUtc(group.dispenseTime),
+          '',
           first?.departmentName ?? '-',
-          first?.borrowDepartmentName?.trim() ? first.borrowDepartmentName : '-',
-          borrowRemarkCell(first ?? {}),
-          mainRowDispenser,
+          '',
+          '',
+          '',
         ].forEach((val, colIndex) => {
           const cell = groupRow.getCell(colIndex + 1);
           cell.value = val as any;
@@ -196,11 +192,10 @@ export class DispensedItemsExcelService {
         dataRowIndex++;
 
         // แถวรายการในกลุ่ม
-        group.items.forEach((item, subIdx) => {
+        group.items.forEach((item) => {
           const excelRow = worksheet.getRow(dataRowIndex);
-          const subLabel = '';
           [
-            subLabel,
+            '',
             item.itemcode,
             item.itemname ?? '-',
             formatQtyWithMainUnitForReport(item.qty ?? 1, item),

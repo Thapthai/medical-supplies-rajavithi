@@ -14,7 +14,7 @@ import {
 import type { ComparisonItem, FilterState, SummaryData } from './types';
 import { itemComparisonApi } from '@/lib/staffApi/itemComparisonApi';
 import { staffCabinetApi, staffCabinetDepartmentApi } from '@/lib/staffApi/cabinetApi';
-import { getStaffAllowedDepartmentIds } from '@/lib/staffDepartmentScope';
+import { getStaffAllowedDepartmentIds, readStaffRoleDefaultDepartmentIdFromStorage, sortCabinetsByName } from '@/lib/staffDepartmentScope';
 
 type CabinetFilterOption = { id: number; cabinet_name?: string; cabinet_code?: string };
 function mapCabinetRow(c: unknown): CabinetFilterOption | null {
@@ -49,7 +49,7 @@ export default function ItemComparisonPage() {
     startDate: getTodayDate(),
     endDate: getTodayDate(),
     itemTypeFilter: 'all',
-    departmentCode: '',
+    departmentCode: readStaffRoleDefaultDepartmentIdFromStorage(),
     subDepartmentId: '',
     cabinetId: '',
   });
@@ -58,7 +58,7 @@ export default function ItemComparisonPage() {
     startDate: getTodayDate(),
     endDate: getTodayDate(),
     itemTypeFilter: 'all',
-    departmentCode: '',
+    departmentCode: readStaffRoleDefaultDepartmentIdFromStorage(),
     subDepartmentId: '',
     cabinetId: '',
   });
@@ -91,7 +91,7 @@ export default function ItemComparisonPage() {
                 if (mapped && !unique.has(mapped.id)) unique.set(mapped.id, mapped);
               }
             }
-            next = Array.from(unique.values()).sort((a, b) => a.id - b.id);
+            next = sortCabinetsByName(Array.from(unique.values()));
             return next;
           }
           const res = await staffCabinetApi.getAll({ page: 1, limit: 500 });
@@ -128,7 +128,7 @@ export default function ItemComparisonPage() {
           }
           next = Array.from(unique.values());
         }
-        return next;
+        return sortCabinetsByName(next);
       } catch {
         return [];
       }
@@ -232,46 +232,28 @@ export default function ItemComparisonPage() {
     }
   };
 
-  useEffect(() => {
-    const initialFilters: FilterState = {
-      searchItemCode: '',
-      startDate: getTodayDate(),
-      endDate: getTodayDate(),
-      itemTypeFilter: 'all',
-      departmentCode: '',
-      subDepartmentId: '',
-      cabinetId: '',
-    };
-    setFilters(initialFilters);
-    setAppliedFilters(initialFilters);
-    void fetchComparisonList(1, initialFilters);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount only
-  }, []);
-
-  const handleSearch = (keywordOverride?: string) => {
+  const handleSearch = (next?: FilterState) => {
     setCurrentPage(1);
-    if (keywordOverride !== undefined) {
-      setFilters((prev) => {
-        const updated = { ...prev, searchItemCode: keywordOverride };
-        setAppliedFilters(updated);
-        fetchComparisonList(1, updated);
-        return updated;
-      });
-    } else {
-      setAppliedFilters(filters);
-      fetchComparisonList(1);
+    if (next) {
+      setFilters(next);
+      setAppliedFilters(next);
+      fetchComparisonList(1, next);
+      return;
     }
+    setAppliedFilters(filters);
+    fetchComparisonList(1);
   };
 
-  const handleClearSearch = () => {
+  const handleClearSearch = (overrides?: Partial<FilterState>) => {
     const clearedFilters: FilterState = {
       searchItemCode: '',
       startDate: getTodayDate(),
       endDate: getTodayDate(),
       itemTypeFilter: 'all',
-      departmentCode: '',
+      departmentCode: readStaffRoleDefaultDepartmentIdFromStorage(),
       subDepartmentId: '',
       cabinetId: '',
+      ...overrides,
     };
     setFilters(clearedFilters);
     setAppliedFilters(clearedFilters);

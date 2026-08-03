@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { History } from 'lucide-react';
 import { staffMedicalSuppliesApi } from '@/lib/staffApi/medicalSuppliesApi';
@@ -9,6 +9,8 @@ import MedicalSuppliesTable from './components/MedicalSuppliesTable';
 import MedicalSuppliesSearchFilters from './components/MedicalSuppliesSearchFilters';
 import MedicalSupplySelectedDetailSection from './components/MedicalSupplySelectedDetailSection';
 import { todayYyyyMmDdUtc } from '@/lib/formatThaiDateTime';
+import { readStaffRoleDefaultDepartmentIdFromStorage } from '@/lib/staffDepartmentScope';
+import type { MedicalSuppliesSearchFilterFields } from './components/MedicalSuppliesSearchFilters';
 
 export default function MedicalSuppliesPage() {
   const [loading, setLoading] = useState(true);
@@ -20,8 +22,25 @@ export default function MedicalSuppliesPage() {
   /** วันนี้ YYYY-MM-DD ตาม UTC — ให้ตรงกับ filter ฝั่ง API ไม่บวก +7 */
   const getTodayDate = () => todayYyyyMmDdUtc();
 
-  // Form filters (for display in form, doesn't trigger search)
-  const [formFilters, setFormFilters] = useState({
+  type PageFilters = {
+    startDate: string;
+    endDate: string;
+    patientHN: string;
+    patientEN: string;
+    patientName: string;
+    keyword: string;
+    userName: string;
+    firstName: string;
+    lastName: string;
+    assessionNo: string;
+    itemName: string;
+    departmentCode: string;
+    usageType: string;
+    printDate: string;
+    timePrintDate: string;
+  };
+
+  const buildEmptyFilters = (): PageFilters => ({
     startDate: getTodayDate(),
     endDate: getTodayDate(),
     patientHN: '',
@@ -33,30 +52,17 @@ export default function MedicalSuppliesPage() {
     lastName: '',
     assessionNo: '',
     itemName: '',
-    departmentCode: '',
+    departmentCode: readStaffRoleDefaultDepartmentIdFromStorage(),
     usageType: '',
     printDate: '',
     timePrintDate: '',
   });
 
+  // Form filters (for display in form, doesn't trigger search)
+  const [formFilters, setFormFilters] = useState<PageFilters>(buildEmptyFilters);
+
   // Active filters (for actual search, triggers fetchSupplies)
-  const [activeFilters, setActiveFilters] = useState({
-    startDate: getTodayDate(),
-    endDate: getTodayDate(),
-    patientHN: '',
-    patientEN: '',
-    patientName: '',
-    keyword: '',
-    userName: '',
-    firstName: '',
-    lastName: '',
-    assessionNo: '',
-    itemName: '',
-    departmentCode: '',
-    usageType: '',
-    printDate: '',
-    timePrintDate: '',
-  });
+  const [activeFilters, setActiveFilters] = useState<PageFilters>(buildEmptyFilters);
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -159,23 +165,15 @@ export default function MedicalSuppliesPage() {
     }
   };
 
-  const initialFetchDone = useRef(false);
-  useEffect(() => {
-    if (initialFetchDone.current) return;
-    initialFetchDone.current = true;
-    void fetchSupplies(undefined, 1, { silent: true });
-    // โหลดครั้งแรกด้วยตัวกรองเริ่มต้น
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
     void fetchSupplies(activeFilters, page);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleSearch = () => {
-    const next = { ...formFilters };
+  const handleSearch = (override?: Partial<MedicalSuppliesSearchFilterFields>) => {
+    const next: PageFilters = { ...formFilters, ...override };
+    setFormFilters(next);
     setActiveFilters(next);
     setCurrentPage(1);
     setSelectedSupply(null);
@@ -184,23 +182,7 @@ export default function MedicalSuppliesPage() {
   };
 
   const handleReset = () => {
-    const resetFilters = {
-      startDate: getTodayDate(),
-      endDate: getTodayDate(),
-      patientHN: '',
-      patientEN: '',
-      patientName: '',
-      keyword: '',
-      userName: '',
-      firstName: '',
-      lastName: '',
-      assessionNo: '',
-      itemName: '',
-      departmentCode: '',
-      usageType: '',
-      printDate: '',
-      timePrintDate: '',
-    };
+    const resetFilters = buildEmptyFilters();
     setFormFilters(resetFilters);
     setActiveFilters(resetFilters);
     setCurrentPage(1);

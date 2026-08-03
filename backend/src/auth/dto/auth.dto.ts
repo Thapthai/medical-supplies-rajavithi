@@ -1,4 +1,4 @@
-import { IsEmail, IsNotEmpty, IsString, IsOptional, IsEnum, MinLength, Matches } from 'class-validator';
+import { IsBoolean, IsEmail, IsNotEmpty, IsString, IsOptional, IsEnum, MinLength, Matches } from 'class-validator';
 
 export enum AuthMethod {
   JWT = 'jwt',
@@ -9,7 +9,7 @@ export enum AuthMethod {
 
 export class RegisterDto {
   @IsEmail()
-  email: string;
+  email!: string;
 
   @IsNotEmpty()
   @IsString()
@@ -17,11 +17,16 @@ export class RegisterDto {
   @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z\d]).+$/, {
     message: 'รหัสผ่านต้องมีตัวพิมพ์ใหญ่ ตัวพิมพ์เล็ก ตัวเลข และอักษรพิเศษ'
   })
-  password: string;
+  password!: string;
 
   @IsNotEmpty()
   @IsString()
-  name: string;
+  name!: string;
+
+  /** ถ้าส่ง true จะสร้างเป็น admin — ไม่ส่งหรือ false ทำงานเหมือนเดิม (ไม่ใช่ admin) */
+  @IsOptional()
+  @IsBoolean()
+  is_admin?: boolean;
 
   @IsOptional()
   @IsEnum(AuthMethod)
@@ -30,11 +35,11 @@ export class RegisterDto {
 
 export class LoginDto {
   @IsEmail()
-  email: string;
+  email!: string;
 
   @IsNotEmpty()
   @IsString()
-  password: string;
+  password!: string;
 
   @IsOptional()
   @IsEnum(AuthMethod)
@@ -44,13 +49,13 @@ export class LoginDto {
 export class FirebaseLoginDto {
   @IsNotEmpty()
   @IsString()
-  idToken: string;
+  idToken!: string;
 }
 
 export class ApiKeyCreateDto {
   @IsNotEmpty()
   @IsString()
-  name: string;
+  name!: string;
 
   @IsOptional()
   @IsString()
@@ -69,13 +74,13 @@ export class UpdateClientCredentialDto {
 export class RefreshTokenDto {
   @IsNotEmpty()
   @IsString()
-  refresh_token: string;
+  refresh_token!: string;
 }
 
 export class Enable2FADto {
   @IsNotEmpty()
   @IsString()
-  password: string;
+  password!: string;
 
   @IsOptional()
   @IsEnum({ totp: 'totp', email_otp: 'email_otp', backup_code: 'backup_code' } as any)
@@ -85,17 +90,17 @@ export class Enable2FADto {
 export class Verify2FASetupDto {
   @IsNotEmpty()
   @IsString()
-  secret: string;
+  secret!: string;
 
   @IsNotEmpty()
   @IsString()
-  token: string;
+  token!: string;
 }
 
 export class Disable2FADto {
   @IsNotEmpty()
   @IsString()
-  password: string;
+  password!: string;
 
   @IsOptional()
   @IsString()
@@ -105,7 +110,7 @@ export class Disable2FADto {
 export class Verify2FADto {
   @IsNotEmpty()
   @IsString()
-  token: string;
+  token!: string;
 
   @IsOptional()
   type?: string;
@@ -114,12 +119,12 @@ export class Verify2FADto {
 export class Generate2FABackupCodesDto {
   @IsNotEmpty()
   @IsString()
-  password: string;
+  password!: string;
 }
 
 export class SendEmailOTPDto {
   @IsEmail()
-  email: string;
+  email!: string;
 
   @IsOptional()
   @IsString()
@@ -129,11 +134,11 @@ export class SendEmailOTPDto {
 export class LoginWith2FADto {
   @IsNotEmpty()
   @IsString()
-  tempToken: string;
+  tempToken!: string;
 
   @IsNotEmpty()
   @IsString()
-  code: string;
+  code!: string;
 
   @IsOptional()
   type?: string;
@@ -142,16 +147,16 @@ export class LoginWith2FADto {
 export class ChangePasswordDto {
   @IsNotEmpty()
   @IsString()
-  currentPassword: string;
+  currentPassword!: string;
 
   @IsNotEmpty()
   @IsString()
   @MinLength(8, { message: 'รหัสผ่านใหม่ต้องมีอย่างน้อย 8 ตัวอักษร' })
-  newPassword: string;
+  newPassword!: string;
 
   @IsNotEmpty()
   @IsString()
-  confirmPassword: string;
+  confirmPassword!: string;
 }
 
 export class UpdateUserProfileDto {
@@ -174,21 +179,21 @@ export class UpdateUserProfileDto {
 
 export class ResetPasswordDto {
   @IsEmail()
-  email: string;
+  email!: string;
 }
 
 export class ConfirmResetPasswordDto {
   @IsNotEmpty()
   @IsString()
-  token: string;
+  token!: string;
 
   @IsNotEmpty()
   @IsString()
   @MinLength(8)
   @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z\d]).+$/)
-  newPassword: string;
+  newPassword!: string;
 
   @IsNotEmpty()
   @IsString()
-  confirmPassword: string;
+  confirmPassword!: string;
 }

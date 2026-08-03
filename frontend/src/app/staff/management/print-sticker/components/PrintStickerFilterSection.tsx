@@ -8,6 +8,11 @@ import {
   clampDepartmentIdString,
   fetchStaffDepartmentsForFilter,
   getStaffAllowedDepartmentIds,
+  getStaffRoleDefaultCabinetId,
+  getStaffRoleDefaultDepartmentId,
+  pickDefaultCabinetId,
+  resolveStaffInitialDepartmentId,
+  sortCabinetsByName,
 } from '@/lib/staffDepartmentScope';
 import { cn } from '@/lib/utils';
 
@@ -63,6 +68,16 @@ export default function PrintStickerFilterSection({
   const [loadingCabinets, setLoadingCabinets] = useState(false);
   const allowedDepartmentIdsRef = useRef<number[] | null | undefined>(undefined);
   const [canPickAllRoleDepartments, setCanPickAllRoleDepartments] = useState(false);
+  const [roleDefaultDeptId, setRoleDefaultDeptId] = useState('');
+  const [roleDefaultReady, setRoleDefaultReady] = useState(false);
+  /** ตู้ Cabinet เริ่มต้นจาก Role via GET /staff/me/departments */
+  const [roleDefaultCabinetId, setRoleDefaultCabinetId] = useState('');
+  const autoCabinetForDeptRef = useRef('');
+  const departmentIdRef = useRef(departmentId);
+  const cabinetIdRef = useRef(cabinetId);
+  const defaultsAppliedRef = useRef(false);
+  departmentIdRef.current = departmentId;
+  cabinetIdRef.current = cabinetId;
 
   const roleScopeDivisionSummary = useMemo(
     () => (canPickAllRoleDepartments ? buildRoleScopeDivisionSummary(departments) : ''),
@@ -143,13 +158,14 @@ export default function PrintStickerFilterSection({
           }
           next = Array.from(unique.values());
         }
+        next = sortCabinetsByName(next);
         setCabinets(next);
-        return;
+        return next;
       }
       const deptId = parseInt(trimmed, 10);
       if (Number.isNaN(deptId)) {
         setCabinets([]);
-        return;
+        return [];
       }
       const response = await staffCabinetDepartmentApi.getAll({
         departmentId: deptId,
@@ -166,15 +182,47 @@ export default function PrintStickerFilterSection({
           });
         next = Array.from(unique.values());
       }
+      next = sortCabinetsByName(next);
       setCabinets(next);
+      return next;
     } catch {
       setCabinets([]);
+      return [];
     } finally {
       setLoadingCabinets(false);
     }
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [fromApi, cabinetFromApi] = await Promise.all([
+        getStaffRoleDefaultDepartmentId(),
+        getStaffRoleDefaultCabinetId(),
+      ]);
+      if (cancelled) return;
+      setRoleDefaultDeptId(fromApi);
+      setRoleDefaultCabinetId(cabinetFromApi);
+      setRoleDefaultReady(true);
+      if (fromApi && !departmentIdRef.current.trim()) {
+        onDepartmentIdChange(fromApi);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [onDepartmentIdChange]);
+
+  useEffect(() => {
+    const d = roleDefaultDeptId.trim();
+    if (!d) return;
+    if (!departmentId.trim()) {
+      onDepartmentIdChange(d);
+    }
+  }, [roleDefaultDeptId, departmentId, onDepartmentIdChange]);
+
+  useEffect(() => {
+    if (!roleDefaultReady || defaultsAppliedRef.current) return;
     let cancelled = false;
     (async () => {
       const allowed = await getStaffAllowedDepartmentIds();
@@ -191,10 +239,24 @@ export default function PrintStickerFilterSection({
         });
         if (cancelled) return;
         setDepartments(list as Department[]);
-        const nextDept = clampDepartmentIdString(departmentId, allowed, '');
-        if (nextDept !== departmentId) {
+
+        const nextDept = resolveStaffInitialDepartmentId({
+          roleDefaultDeptId: roleDefaultDeptId.trim(),
+          allowed,
+          departments: list as Department[],
+        });
+
+        defaultsAppliedRef.current = true;
+
+        if (nextDept !== departmentIdRef.current) {
           onDepartmentIdChange(nextDept);
           onCabinetIdChange('');
+        } else {
+          const clamped = clampDepartmentIdString(departmentIdRef.current, allowed, '');
+          if (clamped !== departmentIdRef.current) {
+            onDepartmentIdChange(clamped);
+            onCabinetIdChange('');
+          }
         }
       } catch (error) {
         console.error(error);
@@ -205,12 +267,36 @@ export default function PrintStickerFilterSection({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- clamp ครั้งแรกหลังโหลด scope
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- apply role default once
+  }, [roleDefaultReady, roleDefaultDeptId, onDepartmentIdChange, onCabinetIdChange]);
 
   useEffect(() => {
     void resolveCabinets(departmentId);
   }, [departmentId, resolveCabinets]);
+
+  useEffect(() => {
+    if (loadingCabinets) return;
+    const deptId = departmentId.trim();
+    if (!deptId) {
+      autoCabinetForDeptRef.current = '';
+      return;
+    }
+
+    const current = cabinetId.trim();
+    const currentOk = current !== '' && cabinets.some((c) => String(c.id) === current);
+    if (currentOk) {
+      autoCabinetForDeptRef.current = deptId;
+      return;
+    }
+    if (cabinets.length === 0) return;
+    if (autoCabinetForDeptRef.current === deptId && current === '') return;
+
+    const defaultCabinetId = pickDefaultCabinetId(cabinets, roleDefaultCabinetId);
+    autoCabinetForDeptRef.current = deptId;
+    if (cabinetId !== defaultCabinetId) {
+      onCabinetIdChange(defaultCabinetId);
+    }
+  }, [cabinets, loadingCabinets, departmentId, cabinetId, onCabinetIdChange, roleDefaultCabinetId]);
 
   useEffect(() => {
     if (cabinetId && cabinets.length > 0) {

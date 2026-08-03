@@ -1,7 +1,3 @@
-/** ความคาดเคลื่อนกลุ่มตามเวลาเบิก (วินาที) — ตรงกับ frontend buildDispensedGroups */
-export const DISPENSED_GROUP_TIME_TOLERANCE_SEC = 3;
-const TOLERANCE_MS = DISPENSED_GROUP_TIME_TOLERANCE_SEC * 1000;
-
 export type DispensedGroupRow = {
   itemcode?: string;
   itemname?: string;
@@ -12,73 +8,60 @@ export type DispensedGroupRow = {
 export interface DispensedReportGroup<T extends DispensedGroupRow = DispensedGroupRow> {
   itemcode: string;
   itemname: string;
+  /** เวลาเบิกล่าสุดในกลุ่ม (ใช้เรียงลำดับกลุ่ม) */
   dispenseTime: string;
   totalQty: number;
   items: T[];
 }
 
-/** จัดกลุ่มรายการเบิก — เรียงเวลา DESC ให้ตรงกับ getDispensedItems ORDER BY และหน้าเว็บ */
+function timeMs(v?: string): number {
+  const t = new Date(v ?? 0).getTime();
+  return Number.isFinite(t) ? t : 0;
+}
+
+/**
+ * จัดกลุ่มรายการเบิกตามรหัสอุปกรณ์ (itemcode)
+ * — รายการในกลุ่มเรียงเวลาเบิก DESC
+ * — กลุ่มเรียงตามเวลาเบิกล่าสุดในกลุ่ม DESC
+ */
 export function buildDispensedGroups<T extends DispensedGroupRow>(
   items: T[],
 ): DispensedReportGroup<T>[] {
   if (!items || items.length === 0) return [];
 
-  const sorted = [...items].sort((a, b) => {
-    const tA = new Date(a.modifyDate ?? 0).getTime();
-    const tB = new Date(b.modifyDate ?? 0).getTime();
-    return tB - tA;
-  });
-
-  const groups: DispensedReportGroup<T>[] = [];
-  let current: T[] = [];
-  let groupStartTime = 0;
-
-  for (const item of sorted) {
-    const t = new Date(item.modifyDate ?? 0).getTime();
-    if (current.length === 0) {
-      current = [item];
-      groupStartTime = t;
-    } else {
-      const sameItem = (item.itemcode ?? '') === (current[0].itemcode ?? '');
-      const withinWindow = groupStartTime - t <= TOLERANCE_MS;
-      if (sameItem && withinWindow) {
-        current.push(item);
-      } else {
-        if (current.length > 0) {
-          const totalQty = current.reduce((sum, i) => sum + (i.qty ?? 1), 0);
-          groups.push({
-            itemcode: current[0].itemcode ?? '',
-            itemname: current[0].itemname ?? current[0].itemcode ?? '',
-            dispenseTime: current[0].modifyDate ?? '',
-            totalQty,
-            items: current,
-          });
-        }
-        current = [item];
-        groupStartTime = t;
-      }
-    }
+  const byCode = new Map<string, T[]>();
+  for (const item of items) {
+    const code = (item.itemcode ?? '').trim() || '-';
+    const list = byCode.get(code);
+    if (list) list.push(item);
+    else byCode.set(code, [item]);
   }
 
-  if (current.length > 0) {
-    const totalQty = current.reduce((sum, i) => sum + (i.qty ?? 1), 0);
+  const groups: DispensedReportGroup<T>[] = [];
+  for (const [itemcode, groupItems] of byCode) {
+    const sortedItems = [...groupItems].sort(
+      (a, b) => timeMs(b.modifyDate) - timeMs(a.modifyDate),
+    );
+    const totalQty = sortedItems.reduce((sum, i) => sum + (i.qty ?? 1), 0);
+    const first = sortedItems[0];
     groups.push({
-      itemcode: current[0].itemcode ?? '',
-      itemname: current[0].itemname ?? current[0].itemcode ?? '',
-      dispenseTime: current[0].modifyDate ?? '',
+      itemcode,
+      itemname: first?.itemname ?? itemcode,
+      dispenseTime: first?.modifyDate ?? '',
       totalQty,
-      items: current,
+      items: sortedItems,
     });
   }
 
+  groups.sort((a, b) => timeMs(b.dispenseTime) - timeMs(a.dispenseTime));
   return groups;
 }
 
 /** เรียงแถบรายการเดียว — ตรง ORDER BY ist.LastCabinetModify DESC, i.itemname ASC */
 export function sortDispensedItemsForReport<T extends DispensedGroupRow>(items: T[]): T[] {
   return [...items].sort((a, b) => {
-    const tA = new Date(a.modifyDate ?? 0).getTime();
-    const tB = new Date(b.modifyDate ?? 0).getTime();
+    const tA = timeMs(a.modifyDate);
+    const tB = timeMs(b.modifyDate);
     if (tB !== tA) return tB - tA;
     const nameA = (a.itemname ?? a.itemcode ?? '').toString();
     const nameB = (b.itemname ?? b.itemcode ?? '').toString();
