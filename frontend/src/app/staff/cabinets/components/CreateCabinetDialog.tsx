@@ -37,7 +37,7 @@ export default function CreateCabinetDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       setLoading(true);
       const data: { cabinet_name?: string; stock_id?: number } = {
@@ -73,9 +73,7 @@ export default function CreateCabinetDialog({
             <Package className="h-5 w-5" />
             <span>เพิ่มตู้ใหม่</span>
           </DialogTitle>
-          <DialogDescription>
-            รหัสตู้จะสร้างอัตโนมัติจากระบบ
-          </DialogDescription>
+          <DialogDescription>รหัสตู้จะสร้างอัตโนมัติจากระบบ</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -100,9 +98,7 @@ export default function CreateCabinetDialog({
               onChange={(e) => setFormData({ ...formData, stock_id: e.target.value })}
               className={fieldInputClass}
             />
-            <p className="text-xs text-muted-foreground">
-              ไม่กรอกระบบจะสร้างให้อัตโนมัติ
-            </p>
+            <p className="text-xs text-muted-foreground">ไม่กรอกระบบจะสร้างให้อัตโนมัติ</p>
           </div>
 
           <div className="flex justify-end space-x-2 pt-4">

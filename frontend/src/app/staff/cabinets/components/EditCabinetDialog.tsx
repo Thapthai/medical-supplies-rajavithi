@@ -15,6 +15,7 @@ interface Cabinet {
   cabinet_code?: string;
   cabinet_type?: string;
   stock_id?: number;
+  ip_address?: string | null;
   cabinet_status?: string;
 }
 
@@ -38,7 +39,6 @@ export default function EditCabinetDialog({
     stock_id: '',
   });
 
-  // Load cabinet data when dialog opens
   useEffect(() => {
     if (open && cabinet) {
       setFormData({
@@ -49,7 +49,6 @@ export default function EditCabinetDialog({
     }
   }, [open, cabinet]);
 
-  // Reset form when dialog is closed
   useEffect(() => {
     if (!open) {
       setFormData({
@@ -66,7 +65,11 @@ export default function EditCabinetDialog({
 
     try {
       setLoading(true);
-      const data: { cabinet_name?: string; cabinet_code?: string; stock_id?: number } = {
+      const data: {
+        cabinet_name?: string;
+        cabinet_code?: string;
+        stock_id?: number;
+      } = {
         cabinet_name: formData.cabinet_name || undefined,
         cabinet_code: formData.cabinet_code || undefined,
       };

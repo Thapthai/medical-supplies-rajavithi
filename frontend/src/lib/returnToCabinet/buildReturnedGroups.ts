@@ -1,70 +1,90 @@
 import type { DispensedItem } from '@/app/admin/return-to-cabinet/types';
-
-/** ความคาดเคลื่อนกลุ่มตามเวลาคืน (วินาที) — ต้องตรงกับ ReturnedTable */
-export const RETURNED_GROUP_TIME_TOLERANCE_SEC = 3;
-const TOLERANCE_MS = RETURNED_GROUP_TIME_TOLERANCE_SEC * 1000;
+import { toUtcYyyyMmDd } from '@/lib/formatThaiDateTime';
 
 export interface ReturnedGroup {
   key: string;
   itemcode: string;
   itemname: string;
+  /** วันที่เติม (YYYY-MM-DD UTC) ที่ใช้จัดกลุ่ม */
+  returnDate: string;
   returnTime: string;
+  cabinetUserName: string;
   items: DispensedItem[];
   totalQty: number;
 }
 
+function timeMs(v?: string): number {
+  const t = new Date(v ?? 0).getTime();
+  return Number.isFinite(t) ? t : 0;
+}
+
+/** คีย์ผู้เติม — ไม่ยุบรายการที่ไม่มีชื่อรวมกันเมื่อคนละ user/ตู้ */
+function requesterGroupKey(item: DispensedItem): string {
+  const name = (item.cabinetUserName ?? '').trim();
+  if (name) return `n:${name}`;
+  const uid = item.CabinetUserID;
+  if (uid != null && Number(uid) > 0) return `u:${uid}`;
+  const stock = item.StockID;
+  if (stock != null && Number(stock) > 0) return `s:${stock}`;
+  const rowId = item.RowID;
+  if (rowId != null && Number(rowId) > 0) return `r:${rowId}`;
+  return 'anon';
+}
+
+function groupKeyParts(item: DispensedItem): {
+  itemcode: string;
+  returnDate: string;
+  cabinetUserName: string;
+  key: string;
+} {
+  const itemcode = (item.itemcode ?? '').trim() || '-';
+  const returnDate = toUtcYyyyMmDd(item.modifyDate) || '-';
+  const cabinetUserName = (item.cabinetUserName ?? '').trim();
+  const requesterKey = requesterGroupKey(item);
+  return {
+    itemcode,
+    returnDate,
+    cabinetUserName,
+    key: `${itemcode}|${returnDate}|${requesterKey}`,
+  };
+}
+
 /**
- * จัดกลุ่มรายการดิบ — เรียงตามเวลา DESC ให้ตรงกับ backend ORDER BY LastCabinetModify DESC
+ * จัดกลุ่มรายการเติมตาม รหัสอุปกรณ์ + วันที่เติม + ชื่อผู้เติม
+ * — รายการในกลุ่มเรียงเวลา DESC
+ * — กลุ่มเรียงตามเวลาเติมล่าสุดในกลุ่ม DESC
  */
 export function buildReturnedGroups(items: DispensedItem[]): ReturnedGroup[] {
   if (items.length === 0) return [];
-  const sorted = [...items].sort((a, b) => {
-    const tA = new Date(a.modifyDate).getTime();
-    const tB = new Date(b.modifyDate).getTime();
-    return tB - tA;
-  });
+
+  const byKey = new Map<string, DispensedItem[]>();
+  for (const item of items) {
+    const { key } = groupKeyParts(item);
+    const list = byKey.get(key);
+    if (list) list.push(item);
+    else byKey.set(key, [item]);
+  }
 
   const groups: ReturnedGroup[] = [];
-  let current: DispensedItem[] = [];
-  let groupStartTime = 0;
-
-  for (const item of sorted) {
-    const t = new Date(item.modifyDate).getTime();
-    if (current.length === 0) {
-      current = [item];
-      groupStartTime = t;
-    } else {
-      const sameItem = (item.itemcode ?? '') === (current[0].itemcode ?? '');
-      const withinWindow = groupStartTime - t <= TOLERANCE_MS;
-      if (sameItem && withinWindow) {
-        current.push(item);
-      } else {
-        if (current.length > 0) {
-          const totalQty = current.reduce((sum, i) => sum + (i.qty ?? 1), 0);
-          groups.push({
-            key: `${current[0].itemcode}_${current[0].RowID}_${groupStartTime}`,
-            itemcode: current[0].itemcode ?? '',
-            itemname: current[0].itemname ?? current[0].itemcode ?? '',
-            returnTime: current[0].modifyDate,
-            items: current,
-            totalQty,
-          });
-        }
-        current = [item];
-        groupStartTime = t;
-      }
-    }
-  }
-  if (current.length > 0) {
-    const totalQty = current.reduce((sum, i) => sum + (i.qty ?? 1), 0);
+  for (const groupItems of byKey.values()) {
+    const sortedItems = [...groupItems].sort(
+      (a, b) => timeMs(b.modifyDate) - timeMs(a.modifyDate),
+    );
+    const totalQty = sortedItems.reduce((sum, i) => sum + (i.qty ?? 1), 0);
+    const first = sortedItems[0];
+    const parts = groupKeyParts(first);
     groups.push({
-      key: `${current[0].itemcode}_${current[0].RowID}_${groupStartTime}`,
-      itemcode: current[0].itemcode ?? '',
-      itemname: current[0].itemname ?? current[0].itemcode ?? '',
-      returnTime: current[0].modifyDate,
-      items: current,
+      key: parts.key,
+      itemcode: parts.itemcode,
+      itemname: first?.itemname ?? parts.itemcode,
+      returnDate: parts.returnDate,
+      returnTime: first?.modifyDate ?? '',
+      cabinetUserName: parts.cabinetUserName,
+      items: sortedItems,
       totalQty,
     });
   }
+
+  groups.sort((a, b) => timeMs(b.returnTime) - timeMs(a.returnTime));
   return groups;
 }

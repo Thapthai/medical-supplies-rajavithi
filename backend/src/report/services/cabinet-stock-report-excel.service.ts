@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import * as ExcelJS from 'exceljs';
 import { applyExcelStandardTitleHeader } from '../utils/excel-report-header.util';
 import { resolveCabinetStockShowRowHighlight, CABINET_STOCK_NEUTRAL_ROW_BG } from '../utils/cabinet-stock-row-highlight.util';
+import { sortCabinetStockRowsForReport } from '../utils/cabinet-stock-sort.util';
 import {
   formatQtyWithMainUnitForReport,
   formatQtyPlainForReport,
@@ -143,8 +144,9 @@ export class CabinetStockReportExcelService {
     /** ตรงกับหน้าเว็บ bg-amber-100 — ใกล้หมดอายุ */
     const LIGHT_AMBER = 'FFFEF3C7';
     const showRowHighlight = resolveCabinetStockShowRowHighlight(data);
+    const sortedRows = sortCabinetStockRowsForReport(data.data ?? []);
     let dataRowIndex = tableStartRow + 1;
-    data.data.forEach((row, idx) => {
+    sortedRows.forEach((row, idx) => {
       const excelRow = worksheet.getRow(dataRowIndex);
       const stockMin = row.stock_min ?? 0;
       const isLowStock = stockMin > 0 && (row.balance_qty ?? 0) < stockMin;
@@ -188,6 +190,7 @@ export class CabinetStockReportExcelService {
         cell.alignment = {
           horizontal: colIndex === 1 || colIndex === 2 || colIndex === 3 ? 'left' : 'center',
           vertical: 'middle',
+          wrapText: colIndex === 3,
         };
         cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
       });
@@ -214,16 +217,16 @@ export class CabinetStockReportExcelService {
     noteCell.alignment = { horizontal: 'center', vertical: 'middle' };
     worksheet.getRow(noteRow).height = 16;
 
-    worksheet.getColumn(1).width = 13;
-    worksheet.getColumn(2).width = 18;
-    worksheet.getColumn(3).width = 25;
-    worksheet.getColumn(4).width = 52;
-    worksheet.getColumn(5).width = 20;
-    worksheet.getColumn(6).width = 20;
-    worksheet.getColumn(7).width = 20;
-    worksheet.getColumn(8).width = 24;
-    worksheet.getColumn(9).width = 26;
-    worksheet.getColumn(10).width = 32;
+    worksheet.getColumn(1).width = 8;
+    worksheet.getColumn(2).width = 20;
+    worksheet.getColumn(3).width = 20;
+    worksheet.getColumn(4).width = 64;
+    worksheet.getColumn(5).width = 18;
+    worksheet.getColumn(6).width = 14;
+    worksheet.getColumn(7).width = 14;
+    worksheet.getColumn(8).width = 18;
+    worksheet.getColumn(9).width = 18;
+    worksheet.getColumn(10).width = 28;
 
     const buffer = await workbook.xlsx.writeBuffer();
     return Buffer.from(buffer);

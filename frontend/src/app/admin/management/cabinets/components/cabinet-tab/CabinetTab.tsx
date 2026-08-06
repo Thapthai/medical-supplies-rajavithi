@@ -16,6 +16,7 @@ interface Cabinet {
   cabinet_code?: string;
   cabinet_type?: string;
   stock_id?: number;
+  ip_address?: string | null;
   cabinet_status?: string;
   created_at?: string;
   updated_at?: string;
@@ -93,7 +94,8 @@ export default function CabinetTab() {
       filtered = filtered.filter(
         (cabinet) =>
           cabinet.cabinet_name?.toLowerCase().includes(kw) ||
-          cabinet.cabinet_code?.toLowerCase().includes(kw),
+          cabinet.cabinet_code?.toLowerCase().includes(kw) ||
+          cabinet.ip_address?.toLowerCase().includes(kw),
       );
     }
     setFilteredCabinets(filtered);

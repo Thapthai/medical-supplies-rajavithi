@@ -19,6 +19,7 @@ interface Cabinet {
   cabinet_code?: string;
   cabinet_type?: string;
   stock_id?: number;
+  ip_address?: string | null;
   cabinet_status?: string;
   created_at?: string;
   updated_at?: string;

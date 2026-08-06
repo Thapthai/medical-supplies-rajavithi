@@ -683,6 +683,8 @@ model cabinet {
   cabinet_type   String?  @map("cabinet_type") @db.VarChar(255)
   cabinet_status String?  @default("ACTIVE") @map("cabinet_status") @db.VarChar(255)
   stock_id       Int?     @unique() @map("stock_id")
+  /// IP เครื่องตู้ เช่น 192.168.176.51 → stock_id = last octet - 49 (= 2)
+  ip_address     String?  @unique() @map("ip_address") @db.VarChar(45)
   created_at     DateTime @default(dbgenerated("NOW()")) @map("created_at")
   updated_at     DateTime @updatedAt @map("updated_at")
 

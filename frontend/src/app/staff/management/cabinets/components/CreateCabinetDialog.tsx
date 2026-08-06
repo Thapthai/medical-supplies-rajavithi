@@ -52,10 +52,14 @@ export default function CreateCabinetDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       setLoading(true);
-      const data: any = {
+      const data: {
+        cabinet_name?: string;
+        department_id?: number;
+        stock_id?: number;
+      } = {
         cabinet_name: formData.cabinet_name || undefined,
       };
       if (formData.department_id) {
@@ -140,9 +144,7 @@ export default function CreateCabinetDialog({
               onChange={(e) => setFormData({ ...formData, stock_id: e.target.value })}
               className={fieldInputClass}
             />
-            <p className="text-xs text-muted-foreground">
-              ไม่กรอกระบบจะสร้างให้อัตโนมัติ
-            </p>
+            <p className="text-xs text-muted-foreground">ไม่กรอกระบบจะสร้างให้อัตโนมัติ</p>
           </div>
 
           <div className="flex justify-end space-x-2 pt-4">

@@ -2252,12 +2252,30 @@ export const cabinetApi = {
     return response.data;
   },
 
-  create: async (data: { cabinet_name?: string; cabinet_code?: string; cabinet_type?: string; stock_id?: number; cabinet_status?: string }): Promise<ApiResponse<any>> => {
+  create: async (data: {
+    cabinet_name?: string;
+    cabinet_code?: string;
+    cabinet_type?: string;
+    stock_id?: number;
+    ip_address?: string;
+    cabinet_status?: string;
+    department_id?: number;
+  }): Promise<ApiResponse<any>> => {
     const response = await api.post('/cabinets', data);
     return response.data;
   },
 
-  update: async (id: number, data: { cabinet_name?: string; cabinet_code?: string; cabinet_type?: string; stock_id?: number; cabinet_status?: string }): Promise<ApiResponse<any>> => {
+  update: async (
+    id: number,
+    data: {
+      cabinet_name?: string;
+      cabinet_code?: string;
+      cabinet_type?: string;
+      stock_id?: number;
+      ip_address?: string;
+      cabinet_status?: string;
+    },
+  ): Promise<ApiResponse<any>> => {
     const response = await api.put(`/cabinets/${id}`, data);
     return response.data;
   },

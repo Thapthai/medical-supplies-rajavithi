@@ -19,6 +19,14 @@ export class CreateCabinetDto {
   @Type(() => Number)
   stock_id?: number;
 
+  /**
+   * IP เครื่องตู้ — คำนวณ stock_id จากเลขท้าย (octet − 49)
+   * ถ้าส่งทั้ง ip_address และ stock_id ค่าต้องตรงกัน ไม่งั้น API จะปฏิเสธ
+   */
+  @IsOptional()
+  @IsString()
+  ip_address?: string;
+
   @IsOptional()
   @IsString()
   cabinet_status?: string;
@@ -46,6 +54,14 @@ export class UpdateCabinetDto {
   @IsInt()
   @Type(() => Number)
   stock_id?: number;
+
+  /**
+   * IP เครื่องตู้ — คำนวณ stock_id จากเลขท้าย (octet − 49)
+   * ถ้าส่งทั้ง ip_address และ stock_id ค่าต้องตรงกัน ไม่งั้น API จะปฏิเสธ
+   */
+  @IsOptional()
+  @IsString()
+  ip_address?: string;
 
   @IsOptional()
   @IsString()

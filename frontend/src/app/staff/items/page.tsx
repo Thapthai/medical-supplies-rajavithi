@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { staffItemsApi } from '@/lib/staffApi/itemsApi';
+import { staffItemStockApi } from '@/lib/staffApi/itemStockApi';
+import { staffStickerPrintApi } from '@/lib/staffApi/stickerPrintApi';
 import type { Item } from '@/types/item';
 import { toast } from 'sonner';
 import { Package, Download } from 'lucide-react';
@@ -279,6 +281,56 @@ export default function ItemsPage() {
     }
   };
 
+  const handleQuickPrintSticker = async (item: Item, copies: number) => {
+    const deptId = parseInt(activeFilters.departmentId, 10);
+    const cabId = parseInt(activeFilters.cabinetId, 10);
+    if (Number.isNaN(deptId) || Number.isNaN(cabId)) {
+      toast.error('กรุณาเลือก Division และตู้ Cabinet ก่อนพิมพ์สติ๊กเกอร์');
+      return;
+    }
+
+    const refillQty = Math.max(0, Number((item as Item & { refill_qty?: number }).refill_qty ?? 0));
+    if (refillQty <= 0) {
+      toast.error('ไม่สามารถพิมพ์ได้ เพราะจำนวนที่ต้องเติมเป็น 0');
+      return;
+    }
+    const safeCopies = Math.max(1, Math.min(refillQty, copies));
+
+    try {
+      const printRes = await staffStickerPrintApi.printLabelItems({
+        items: [{ itemcode: item.itemcode, copies: safeCopies }],
+      });
+
+      const stockRes = await staffItemStockApi.createForPrint({
+        lines: [
+          {
+            itemcode: item.itemcode,
+            cabinet_id: cabId,
+            department_id: deptId,
+            copies: safeCopies,
+          },
+        ],
+      });
+
+      if (stockRes?.success === false) {
+        toast.error(stockRes.message || stockRes.error || 'พิมพ์สำเร็จ แต่บันทึก stock ไม่สำเร็จ');
+        return;
+      }
+
+      toast.success(`พิมพ์สติ๊กเกอร์สำเร็จ ${safeCopies} แผ่น (${item.itemcode})`, {
+        description: `${printRes.host}:${printRes.port} · ${printRes.template}`,
+      });
+      await fetchItems(undefined, { resetPage: false, silent: true });
+    } catch (error: unknown) {
+      const msg =
+        (error as { response?: { data?: { message?: string } }; message?: string })?.response?.data
+          ?.message ||
+        (error as { message?: string })?.message ||
+        'พิมพ์สติ๊กเกอร์ไม่สำเร็จ';
+      toast.error(msg);
+    }
+  };
+
   return (
     <>
       <div className="space-y-6">
@@ -319,6 +371,7 @@ export default function ItemsPage() {
           onEdit={handleEdit}
           onDelete={handleDelete}
           onUpdateMinMax={handleUpdateMinMax}
+          onPrintSticker={handleQuickPrintSticker}
           onPageChange={handlePageChange}
           headerActions={
             <div className="flex flex-wrap items-center gap-2">

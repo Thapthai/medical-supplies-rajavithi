@@ -53,6 +53,7 @@ interface Cabinet {
   cabinet_code?: string;
   cabinet_type?: string;
   stock_id?: number;
+  ip_address?: string | null;
   cabinet_status?: string;
 }
 
@@ -136,9 +137,7 @@ export default function EditCabinetDialog({
             <Edit className="h-5 w-5" />
             <span>แก้ไขตู้ Cabinet</span>
           </DialogTitle>
-          <DialogDescription>
-            แก้ไขข้อมูลตู้ (รหัสตู้และ Stock ID สร้างอัตโนมัติจากระบบ)
-          </DialogDescription>
+          <DialogDescription>แก้ไขข้อมูลตู้ (รหัสตู้สร้างอัตโนมัติจากระบบ)</DialogDescription>
         </DialogHeader>
 
         <Form {...form}>

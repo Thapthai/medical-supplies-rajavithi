@@ -6,18 +6,82 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { cn } from '@/lib/utils';
 import type { DispensedItem } from '../types';
 import type { Item } from '@/types/item';
-import ItemNameWithUnit from '@/components/ItemNameWithUnit';
-import QtyWithMainUnit from '@/components/QtyWithMainUnit';
-import { formatUtcDateTime } from '@/lib/formatThaiDateTime';
+import { formatUtcDateTime, parseApiDateTime } from '@/lib/formatThaiDateTime';
 import {
   buildReturnedGroups,
-  RETURNED_GROUP_TIME_TOLERANCE_SEC,
   type ReturnedGroup,
 } from '@/lib/returnToCabinet/buildReturnedGroups';
 
 export type { ReturnedGroup };
 
 const COLUMN_COUNT = 9;
+
+/** มือถือ: แสดงเฉพาะวันที่ (ไม่โชว์เวลา) */
+function formatUtcDateOnly(value?: string | null): string {
+  if (value == null || value === '') return '-';
+  const d = parseApiDateTime(String(value));
+  if (Number.isNaN(d.getTime())) return String(value);
+  return d.toLocaleDateString('th-TH', {
+    timeZone: 'UTC',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+/** แสดงจำนวนเติมให้อ่านง่าย */
+function ReturnQty({
+  qty,
+  item,
+  align = 'center',
+  compact = false,
+}: {
+  qty: number;
+  item: Pick<Item, 'unit' | 'subUnit' | 'SubUnitQty'> | null | undefined;
+  align?: 'center' | 'end';
+  compact?: boolean;
+}) {
+  const main = item?.unit?.UnitName?.trim() || '';
+  const sub = item?.subUnit?.UnitName?.trim() || '';
+  const per = item?.SubUnitQty != null ? Number(item.SubUnitQty) : NaN;
+  const hasSub = Boolean(sub && Number.isFinite(per) && per > 0);
+  const subTotal = hasSub ? Math.round(qty * per) : null;
+
+  return (
+    <div
+      className={cn(
+        'inline-flex flex-col gap-0.5',
+        align === 'end' ? 'items-end' : 'items-center',
+      )}
+      title={
+        hasSub && subTotal != null
+          ? `เติม ${qty.toLocaleString()} ${main || 'หน่วย'} (= ${subTotal.toLocaleString()} ${sub})`
+          : `เติม ${qty.toLocaleString()}${main ? ` ${main}` : ''}`
+      }
+    >
+      <span
+        className={cn(
+          'inline-flex items-baseline gap-1 rounded-md bg-sky-50 text-sky-950 ring-1 ring-inset ring-sky-100',
+          compact ? 'px-1.5 py-0.5' : 'px-2 py-1',
+        )}
+      >
+        <span className={cn('font-semibold tabular-nums', compact ? 'text-sm' : 'text-base')}>
+          {qty.toLocaleString()}
+        </span>
+        {main ? (
+          <span className="text-xs font-medium text-sky-800/80">{main}</span>
+        ) : (
+          <span className="text-xs font-medium text-sky-800/80">ชิ้น</span>
+        )}
+      </span>
+      {hasSub && subTotal != null ? (
+        <span className="text-xs text-muted-foreground whitespace-nowrap">
+          = {subTotal.toLocaleString()} {sub}
+        </span>
+      ) : null}
+    </div>
+  );
+}
 
 interface ReturnedTableProps {
   loading: boolean;
@@ -32,6 +96,34 @@ interface ReturnedTableProps {
   onPageChange: (page: number) => void;
   onExportExcel: () => void;
   onExportPdf: () => void;
+}
+
+function GroupDetailList({ group }: { group: ReturnedGroup }) {
+  return (
+    <ul className="divide-y border-t bg-gray-50">
+      {group.items.map((item, idx) => (
+        <li
+          key={`${group.key}-${idx}-${item.RowID}-${item.RfidCode ?? ''}-${item.modifyDate ?? ''}`}
+          className="flex items-center gap-2 px-3 py-1.5 text-sm"
+        >
+          <span className="w-5 shrink-0 tabular-nums text-muted-foreground">{idx + 1}</span>
+          <div className="min-w-0 flex-1 truncate text-slate-700">
+            <span>{formatUtcDateOnly(item.modifyDate)}</span>
+            <span className="text-muted-foreground"> · </span>
+            <span>{item.departmentName?.trim() || '-'}</span>
+            <span className="text-muted-foreground"> · </span>
+            <span>{item.cabinetUserName?.trim() || '-'}</span>
+          </div>
+          <ReturnQty
+            qty={item.qty ?? 1}
+            item={item as unknown as Item}
+            align="end"
+            compact
+          />
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 export default function ReturnedTable({
@@ -96,46 +188,103 @@ export default function ReturnedTable({
     [items],
   );
 
+  const descriptionText =
+    items.length > 0
+      ? `แสดง ${paginatedGroups.length} กลุ่มในหน้านี้ (สูงสุด ${groupsPerPage} กลุ่มต่อหน้า) · รวม ${totalGroups} กลุ่ม จาก ${totalRawItems} รายการดิบ (รวม ${totalReturnedQty.toLocaleString()} ชิ้น) · จัดกลุ่มตามรหัสอุปกรณ์ + วันที่เติม + ชื่อผู้เติม`
+      : 'รายการอุปกรณ์ทั้งหมดที่เติมเข้าตู้ SmartCabinet';
+
   return (
     <Card>
-      <CardHeader className="flex flex-row items-start justify-between space-y-0 gap-4 pb-2">
-        <div className="space-y-1.5">
-          <CardTitle>รายการเติมอุปกรณ์เข้าตู้</CardTitle>
-          <CardDescription>
-            {items.length > 0
-              ? `แสดง ${paginatedGroups.length} กลุ่มในหน้านี้ (สูงสุด ${groupsPerPage} กลุ่มต่อหน้า) · รวม ${totalGroups} กลุ่ม จาก ${totalRawItems} รายการดิบ (รวม ${totalReturnedQty.toLocaleString()} ชิ้น) · จัดกลุ่มตามรหัสอุปกรณ์และเวลาที่เติม ±${RETURNED_GROUP_TIME_TOLERANCE_SEC} วินาที`
-              : 'รายการอุปกรณ์ทั้งหมดที่เติมเข้าตู้ SmartCabinet'}
-            {(searchItemCode || itemTypeFilter !== 'all') && items.length > 0 && ' (กรองแล้ว)'}
+      <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 px-4 py-3 sm:px-6 sm:py-4">
+        <div className="min-w-0 space-y-1">
+          <CardTitle className="text-base sm:text-lg">รายการเติมอุปกรณ์เข้าตู้</CardTitle>
+          <CardDescription className="text-sm">
+            <span className="sm:hidden">
+              {items.length > 0
+                ? `${totalGroups} กลุ่ม · ${totalReturnedQty.toLocaleString()} ชิ้น`
+                : 'รายการเติมเข้าตู้ SmartCabinet'}
+              {(searchItemCode || itemTypeFilter !== 'all') && items.length > 0 && ' (กรองแล้ว)'}
+            </span>
+            <span className="hidden sm:inline">
+              {descriptionText}
+              {(searchItemCode || itemTypeFilter !== 'all') && items.length > 0 && ' (กรองแล้ว)'}
+            </span>
           </CardDescription>
         </div>
         <div className="flex shrink-0 gap-2">
           <Button onClick={onExportExcel} variant="outline" size="sm">
-            <Download className="h-4 w-4 mr-2" />
-            Excel
+            <Download className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Excel</span>
           </Button>
           <Button onClick={onExportPdf} variant="outline" size="sm">
-            <Download className="h-4 w-4 mr-2" />
-            PDF
+            <Download className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">PDF</span>
           </Button>
         </div>
       </CardHeader>
-      <CardContent className="px-4 py-4">
+      <CardContent className="px-3 py-3 sm:px-4 sm:py-4">
         {loading ? (
-          <div className="flex justify-center items-center py-12">
+          <div className="flex justify-center items-center py-10 sm:py-12">
             <div className="text-center">
               <RefreshCw className="h-8 w-8 animate-spin text-blue-500 mx-auto mb-2" />
               <p className="text-sm text-gray-500">กำลังโหลดข้อมูล...</p>
             </div>
           </div>
         ) : items.length === 0 ? (
-          <div className="text-center py-12">
+          <div className="text-center py-10 sm:py-12">
             <RotateCcw className="h-12 w-12 text-gray-300 mx-auto mb-3" />
             <p className="text-gray-500">ไม่พบรายการเติมอุปกรณ์เข้าตู้</p>
             <p className="text-sm text-gray-400 mt-2">กรุณาตรวจสอบว่ามีข้อมูลในระบบ</p>
           </div>
         ) : (
           <>
-            <div className="overflow-x-auto">
+            <div className="md:hidden divide-y rounded-md border bg-white">
+              {paginatedGroups.map((group, groupIndex) => {
+                const isExpanded = expandedKeys.has(group.key);
+                const rowNum = groupRowOffset + groupIndex + 1;
+                const first = group.items[0];
+                return (
+                  <div key={group.key} className={cn(isExpanded && 'bg-slate-50/60')}>
+                    <button
+                      type="button"
+                      onClick={() => toggleExpand(group.key)}
+                      className="flex w-full items-start gap-2 px-3 py-2.5 text-left touch-manipulation active:bg-slate-100"
+                      aria-expanded={isExpanded}
+                      aria-label={isExpanded ? 'ย่อ' : 'ขยาย'}
+                    >
+                      <span className="mt-0.5 shrink-0 text-slate-500">
+                        {isExpanded ? (
+                          <ChevronDown className="h-4 w-4" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4" />
+                        )}
+                      </span>
+                      <span className="mt-0.5 w-6 shrink-0 text-sm tabular-nums text-muted-foreground">
+                        {rowNum}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-slate-800 break-words leading-snug">
+                          {group.itemname || '-'}
+                        </p>
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                          {formatUtcDateOnly(group.returnTime)}
+                          {first?.cabinetName ? ` · ${first.cabinetName}` : ''}
+                        </div>
+                      </div>
+                      <ReturnQty
+                        qty={group.totalQty}
+                        item={first as unknown as Item}
+                        align="end"
+                        compact
+                      />
+                    </button>
+                    {isExpanded && <GroupDetailList group={group} />}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="hidden md:block overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -143,10 +292,7 @@ export default function ReturnedTable({
                     <TableHead className="w-[100px]">ลำดับ</TableHead>
                     <TableHead>รหัสอุปกรณ์</TableHead>
                     <TableHead>ชื่ออุปกรณ์</TableHead>
-                    <TableHead className="text-center">
-                      <span className="block">จำนวน</span>
-                      <span className="block text-xs font-normal text-muted-foreground">หน่วย</span>
-                    </TableHead>
+                    <TableHead className="text-center min-w-[7rem]">จำนวนที่เติม</TableHead>
                     <TableHead>วันที่เติม</TableHead>
                     <TableHead>ตู้</TableHead>
                     <TableHead>Division</TableHead>
@@ -179,9 +325,7 @@ export default function ReturnedTable({
                               )}
                             </button>
                           </TableCell>
-                          <TableCell className="font-medium text-slate-700">
-                            {rowNum}
-                          </TableCell>
+                          <TableCell className="font-medium text-slate-700">{rowNum}</TableCell>
                           <TableCell>
                             <code className="text-xs bg-gray-100 px-2 py-1 rounded">
                               {group.itemcode || '-'}
@@ -191,7 +335,7 @@ export default function ReturnedTable({
                             {group.itemname || '-'}
                           </TableCell>
                           <TableCell className="text-center">
-                            <QtyWithMainUnit
+                            <ReturnQty
                               qty={group.totalQty}
                               item={group.items[0] as unknown as Item}
                             />
@@ -205,33 +349,36 @@ export default function ReturnedTable({
                           <TableCell className="text-muted-foreground">
                             {group.items[0]?.departmentName ?? '-'}
                           </TableCell>
-                          <TableCell className="text-muted-foreground">{group.items[0]?.cabinetUserName ?? '-'}</TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {group.items[0]?.cabinetUserName ?? '-'}
+                          </TableCell>
                         </TableRow>
 
                         {isExpanded && (
                           <TableRow>
                             <TableCell colSpan={COLUMN_COUNT} className="bg-gray-50 p-4">
                               <div>
-                                <h4 className="font-semibold mb-3 text-gray-700 flex items-center gap-2">
+                                <h4 className="font-semibold mb-3 text-gray-700 flex flex-wrap items-center gap-2">
                                   <RotateCcw className="h-4 w-4" />
-                                  รายการเติมในกลุ่ม ({group.items.length} รายการ · รวม {group.totalQty.toLocaleString()} ชิ้น)
+                                  <span>รายการเติมในกลุ่ม ({group.items.length} ครั้ง)</span>
+                                  <span className="font-normal text-muted-foreground">รวม</span>
+                                  <ReturnQty
+                                    qty={group.totalQty}
+                                    item={group.items[0] as unknown as Item}
+                                    compact
+                                  />
                                 </h4>
                                 <div className="overflow-x-auto">
                                   <Table>
                                     <TableHeader>
                                       <TableRow>
                                         <TableHead className="w-12">ลำดับ</TableHead>
-                                        <TableHead>รหัสอุปกรณ์</TableHead>
-                                        <TableHead>ชื่ออุปกรณ์</TableHead>
-                                        <TableHead className="text-center">
-                                          <span className="block">จำนวน</span>
-                                          <span className="block text-xs font-normal text-muted-foreground">
-                                            หน่วย
-                                          </span>
+                                        <TableHead className="text-center min-w-[7rem]">
+                                          จำนวนที่เติม
                                         </TableHead>
                                         <TableHead>วันที่เติม</TableHead>
                                         <TableHead>Division</TableHead>
-                                        {/* <TableHead>RFID Code</TableHead> */}
+                                        <TableHead>ชื่อผู้เติม</TableHead>
                                       </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -241,21 +388,11 @@ export default function ReturnedTable({
                                           className="hover:bg-gray-100/80"
                                         >
                                           <TableCell className="font-medium">{idx + 1}</TableCell>
-                                          <TableCell>
-                                            <code className="text-xs bg-white px-2 py-0.5 rounded border">
-                                              {item.itemcode || '-'}
-                                            </code>
-                                          </TableCell>
-                                          <TableCell className="min-w-0 max-w-[220px] text-slate-700">
-                                            <ItemNameWithUnit
-                                              item={item as unknown as Item}
-                                              showUnitBracket={false}
-                                            />
-                                          </TableCell>
-                                          <TableCell className="text-center font-medium text-slate-700">
-                                            <QtyWithMainUnit
+                                          <TableCell className="text-center">
+                                            <ReturnQty
                                               qty={item.qty ?? 1}
                                               item={item as unknown as Item}
+                                              compact
                                             />
                                           </TableCell>
                                           <TableCell className="text-muted-foreground text-sm">
@@ -264,9 +401,9 @@ export default function ReturnedTable({
                                           <TableCell className="text-muted-foreground text-sm">
                                             {item.departmentName || '-'}
                                           </TableCell>
-                                          {/* <TableCell className="text-muted-foreground text-sm font-mono">
-                                            {item.RfidCode || '-'}
-                                          </TableCell> */}
+                                          <TableCell className="text-muted-foreground text-sm">
+                                            {item.cabinetUserName || '-'}
+                                          </TableCell>
                                         </TableRow>
                                       ))}
                                     </TableBody>
@@ -284,14 +421,19 @@ export default function ReturnedTable({
             </div>
 
             {totalPages > 1 && (
-              <div className="mt-6 flex items-center justify-between border-t pt-4">
-                <div className="text-sm text-gray-500">
-                  หน้า {currentPage} จาก {totalPages} ({totalGroups} กลุ่ม · {totalRawItems} รายการ)
+              <div className="mt-4 sm:mt-6 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-sm text-gray-500 text-center sm:text-left">
+                  หน้า {currentPage} จาก {totalPages}
+                  <span className="hidden sm:inline">
+                    {' '}
+                    ({totalGroups} กลุ่ม · {totalRawItems} รายการ)
+                  </span>
                 </div>
-                <div className="flex items-center space-x-2">
+                <div className="flex flex-wrap items-center justify-center gap-2">
                   <Button
                     variant="outline"
                     size="sm"
+                    className="hidden sm:inline-flex"
                     onClick={() => onPageChange(1)}
                     disabled={currentPage === 1}
                   >
@@ -305,22 +447,24 @@ export default function ReturnedTable({
                   >
                     ก่อนหน้า
                   </Button>
-                  {generatePageNumbers().map((page, idx) =>
-                    page === '...' ? (
-                      <span key={`ellipsis-${idx}`} className="px-2 text-gray-400">
-                        ...
-                      </span>
-                    ) : (
-                      <Button
-                        key={page}
-                        variant={currentPage === page ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => onPageChange(page as number)}
-                      >
-                        {page}
-                      </Button>
-                    ),
-                  )}
+                  <div className="hidden sm:flex items-center gap-1.5">
+                    {generatePageNumbers().map((page, idx) =>
+                      page === '...' ? (
+                        <span key={`ellipsis-${idx}`} className="px-2 text-gray-400">
+                          ...
+                        </span>
+                      ) : (
+                        <Button
+                          key={page}
+                          variant={currentPage === page ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => onPageChange(page as number)}
+                        >
+                          {page}
+                        </Button>
+                      ),
+                    )}
+                  </div>
                   <Button
                     variant="outline"
                     size="sm"
@@ -332,6 +476,7 @@ export default function ReturnedTable({
                   <Button
                     variant="outline"
                     size="sm"
+                    className="hidden sm:inline-flex"
                     onClick={() => onPageChange(totalPages)}
                     disabled={currentPage === totalPages}
                   >

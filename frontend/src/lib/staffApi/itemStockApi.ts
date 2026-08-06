@@ -1,6 +1,24 @@
 import staffApi from './index';
 
 export const staffItemStockApi = {
+  createForPrint: async (body: {
+    lines: Array<{
+      itemcode: string;
+      cabinet_id: number;
+      department_id: number;
+      copies: number;
+      expire_date?: string;
+    }>;
+  }): Promise<{
+    success?: boolean;
+    message?: string;
+    data?: { count: number; rows: Array<{ RowID: number; ItemCode?: string | null; RfidCode?: string | null }> };
+    error?: string;
+  }> => {
+    const response = await staffApi.post('/item-stocks/for-print', body);
+    return response.data;
+  },
+
   createForPrintByStock: async (body: {
     department_id?: number;
     lines: Array<{

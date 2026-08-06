@@ -3,6 +3,7 @@ import PDFDocument from 'pdfkit';
 import * as fs from 'fs';
 import { CabinetStockReportData, CabinetStockRow } from './cabinet-stock-report-excel.service';
 import { resolveCabinetStockShowRowHighlight, CABINET_STOCK_NEUTRAL_ROW_BG } from '../utils/cabinet-stock-row-highlight.util';
+import { sortCabinetStockRowsForReport } from '../utils/cabinet-stock-sort.util';
 import { resolveReportLogoPath, getReportThaiFontPaths } from '../config/report.config';
 import {
   formatQtyWithMainUnitForReport,
@@ -82,7 +83,9 @@ export class CabinetStockReportPdfService {
         const pageHeight = doc.page.height;
         const contentWidth = pageWidth - margin * 2;
         const summary = data?.summary ?? { total_rows: 0, total_qty: 0, total_refill_qty: 0 };
-        const rows = data?.data && Array.isArray(data.data) ? data.data : [];
+        const rows = sortCabinetStockRowsForReport(
+          data?.data && Array.isArray(data.data) ? data.data : [],
+        );
         const showRowHighlight = resolveCabinetStockShowRowHighlight(data);
 
         // ---- Header block with logo ----
@@ -153,14 +156,13 @@ export class CabinetStockReportPdfService {
         const itemHeight = 28;
         const cellPadding = 4;
         const totalTableWidth = contentWidth;
-        // 5 คอลัมน์ตัวเลข (index 4-8) กว้างเท่ากัน, รหัส+อุปกรณ์กว้างขึ้น
-        // ลำดับ:0.04 แผนก:0.09 รหัส:0.11 อุปกรณ์:0.21 | 5x0.11
-        // ลำดับ, แผนก, รหัสอุปกรณ์(เหลือ), อุปกรณ์, จำนวนในตู้, ถูกใช้งาน, ไม่ถูกใช้งาน, Min/Max, จำนวนที่ต้องเติม
- 
-        const colPct = [0.05, 0.13, 0.13, 0.14, 0.09, 0.08, 0.08, 0.08, 0.10, 0.08];
+        // ย่อรหัสอุปกรณ์ ขยายชื่ออุปกรณ์ (รวมสัดส่วน ≈ 1.0)
+        // ลำดับ, แผนก, รหัส, อุปกรณ์, จำนวนในตู้, ถูกใช้งาน, ไม่ถูกใช้งาน, Min/Max, ต้องเติม, หมายเหตุ
+        // const colPct = [0.05, 0.11, 0.08, 0.25, 0.09, 0.08, 0.08, 0.08, 0.10, 0.11];
+        const colPct = [0.05, 0.10, 0.10, 0.24, 0.09, 0.08, 0.08, 0.08, 0.10, 0.11];
         const colWidths = colPct.map((p) => Math.floor(totalTableWidth * p));
         let sumW = colWidths.reduce((a, b) => a + b, 0);
-        if (sumW < totalTableWidth) colWidths[colWidths.length - 1] += totalTableWidth - sumW;
+        if (sumW < totalTableWidth) colWidths[3] += totalTableWidth - sumW;
         const headers = [
           'ลำดับ',
           'แผนก',

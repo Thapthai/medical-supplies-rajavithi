@@ -7,6 +7,7 @@ import {
   UpdateDepartmentDto,
 } from './dto/department.dto';
 import { CreateCabinetDto, UpdateCabinetDto } from './dto/cabinet.dto';
+import { parseCabinetIpAddress, stockIdFromCabinetIp } from './utils/cabinet-ip-stock';
 
 @Injectable()
 export class DepartmentService {
@@ -190,9 +191,32 @@ export class DepartmentService {
 
   async createCabinet(data: CreateCabinetDto) {
     try {
-      const { department_id, ...rest } = data;
-      let cabinet_code = data.cabinet_code?.trim();
-      let stock_id = data.stock_id;
+      const { department_id, ip_address: rawIp, stock_id: incomingStock, cabinet_code: incomingCode, ...other } =
+        data;
+      let cabinet_code = incomingCode?.trim();
+      let stock_id = incomingStock;
+      let ip_address: string | null = null;
+      try {
+        ip_address = parseCabinetIpAddress(rawIp);
+      } catch (e: any) {
+        return { success: false, message: e?.message || 'รูปแบบ IP ไม่ถูกต้อง' };
+      }
+      if (ip_address) {
+        let stockFromIp: number;
+        try {
+          stockFromIp = stockIdFromCabinetIp(ip_address);
+        } catch (e: any) {
+          return { success: false, message: e?.message || 'ไม่สามารถคำนวณ stock_id จาก IP ได้' };
+        }
+        // ส่งทั้ง IP และ stock_id — ต้องตรงกัน ไม่งั้นปฏิเสธ (กันทับค่าเงียบๆ)
+        if (incomingStock != null && incomingStock > 0 && incomingStock !== stockFromIp) {
+          return {
+            success: false,
+            message: `stock_id ที่ส่งมา (${incomingStock}) ไม่ตรงกับที่คำนวณจาก IP (${stockFromIp}) — กรุณาส่งอย่างใดอย่างหนึ่ง หรือให้ค่าตรงกัน`,
+          };
+        }
+        stock_id = stockFromIp;
+      }
       if (!cabinet_code || stock_id == null) {
         const generated = await this.generateCabinetCode({
           hospitalPrefix: this.HOSPITAL_PREFIX,
@@ -204,9 +228,10 @@ export class DepartmentService {
       }
       const cabinet = await this.prisma.cabinet.create({
         data: {
-          ...rest,
+          ...other,
           cabinet_code,
           stock_id,
+          ip_address,
           ...(department_id ? { cabinet_status: 'USED' } : {}),
         },
       });
@@ -241,6 +266,9 @@ export class DepartmentService {
         if (lowerTargets.includes('stock_id')) {
           return { success: false, message: 'ไม่สามารถสร้างตู้ได้: stock_id ซ้ำในระบบ', error: err.message };
         }
+        if (lowerTargets.includes('ip_address')) {
+          return { success: false, message: 'ไม่สามารถสร้างตู้ได้: IP ซ้ำในระบบ', error: err.message };
+        }
         if (lowerTargets.includes('cabinet_code')) {
           return { success: false, message: 'ไม่สามารถสร้างตู้ได้: cabinet_code ซ้ำในระบบ', error: err.message };
         }
@@ -269,6 +297,7 @@ export class DepartmentService {
       where.OR = [
         { cabinet_name: { contains: query.keyword } },
         { cabinet_code: { contains: query.keyword } },
+        { ip_address: { contains: query.keyword } },
       ];
     }
 
@@ -330,9 +359,52 @@ export class DepartmentService {
 
   async updateCabinet(id: number, data: UpdateCabinetDto) {
     try {
+      const { ip_address: rawIp, stock_id: rawStockId, ...rest } = data;
+      const updateData: {
+        cabinet_name?: string;
+        cabinet_code?: string;
+        cabinet_type?: string;
+        stock_id?: number;
+        cabinet_status?: string;
+        ip_address?: string | null;
+      } = { ...rest };
+
+      if (rawIp !== undefined) {
+        let ip_address: string | null;
+        try {
+          ip_address = parseCabinetIpAddress(rawIp);
+        } catch (e: any) {
+          return { success: false, message: e?.message || 'รูปแบบ IP ไม่ถูกต้อง' };
+        }
+        if (ip_address) {
+          let stockFromIp: number;
+          try {
+            stockFromIp = stockIdFromCabinetIp(ip_address);
+          } catch (e: any) {
+            return { success: false, message: e?.message || 'ไม่สามารถคำนวณ stock_id จาก IP ได้' };
+          }
+          if (rawStockId != null && rawStockId > 0 && rawStockId !== stockFromIp) {
+            return {
+              success: false,
+              message: `stock_id ที่ส่งมา (${rawStockId}) ไม่ตรงกับที่คำนวณจาก IP (${stockFromIp}) — กรุณาส่งอย่างใดอย่างหนึ่ง หรือให้ค่าตรงกัน`,
+            };
+          }
+          updateData.ip_address = ip_address;
+          updateData.stock_id = stockFromIp;
+        } else if (rawStockId !== undefined) {
+          // เลือกกรอก Stock ID — ล้าง IP แล้วใช้ stock_id ตามที่ส่งมา
+          updateData.ip_address = null;
+          updateData.stock_id = rawStockId;
+        } else {
+          updateData.ip_address = null;
+        }
+      } else if (rawStockId !== undefined) {
+        updateData.stock_id = rawStockId;
+      }
+
       const cabinet = await this.prisma.cabinet.update({
         where: { id },
-        data,
+        data: updateData,
       });
       return { success: true, message: 'อัปเดตตู้แล้ว', data: cabinet };
     } catch (err: any) {
@@ -348,6 +420,9 @@ export class DepartmentService {
         const lowerTargets = targets.map((t) => t.toLowerCase());
         if (lowerTargets.includes('stock_id')) {
           return { success: false, message: 'ไม่สามารถอัปเดตตู้ได้: stock_id ซ้ำในระบบ', error: err.message };
+        }
+        if (lowerTargets.includes('ip_address')) {
+          return { success: false, message: 'ไม่สามารถอัปเดตตู้ได้: IP ซ้ำในระบบ', error: err.message };
         }
         if (lowerTargets.includes('cabinet_code')) {
           return { success: false, message: 'ไม่สามารถอัปเดตตู้ได้: cabinet_code ซ้ำในระบบ', error: err.message };
