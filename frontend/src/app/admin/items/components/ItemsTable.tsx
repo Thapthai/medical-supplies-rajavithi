@@ -381,13 +381,27 @@ export default function ItemsTable({
   const [printTarget, setPrintTarget] = useState<{ item: Item; maxCopies: number } | null>(null);
   const [printCopiesInput, setPrintCopiesInput] = useState("1");
 
-  /** ไม่แสดงแถวที่จำนวนในตู้ = 0 — ยกเว้นเมื่อเลือกตู้และ refill > 0 */
+  /** ไม่แสดงแถวที่จำนวนในตู้ = 0 — ยกเว้นเมื่อเลือกตู้และ refill > 0 — เรียงตามชื่ออุปกรณ์ */
   const visibleItems = useMemo(() => {
-    return items.filter((item) => {
-      const qty = getCabinetQty(item);
-      const refill = Math.max(0, Number((item as Item & { refill_qty?: number }).refill_qty ?? 0));
-      return qty !== 0 || refill > 0;
-    });
+    return items
+      .filter((item) => {
+        const qty = getCabinetQty(item);
+        const refill = Math.max(0, Number((item as Item & { refill_qty?: number }).refill_qty ?? 0));
+        return qty !== 0 || refill > 0;
+      })
+      .sort((a, b) => {
+        const nameA = (a.itemname ?? a.itemcode ?? "").toString();
+        const nameB = (b.itemname ?? b.itemcode ?? "").toString();
+        const byName = nameA.localeCompare(nameB, "th", {
+          sensitivity: "base",
+          numeric: true,
+        });
+        if (byName !== 0) return byName;
+        return (a.itemcode ?? "").localeCompare(b.itemcode ?? "", "th", {
+          sensitivity: "base",
+          numeric: true,
+        });
+      });
   }, [items]);
 
   const paginatedItems = useMemo(() => {

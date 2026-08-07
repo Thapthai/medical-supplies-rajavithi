@@ -67,7 +67,16 @@ export default function ItemsPage() {
         activeFilters.statusFilter === 'active' ? item.item_status === 0 : item.item_status !== 0,
       );
     }
-    return filtered;
+    return [...filtered].sort((a, b) => {
+      const nameA = (a.itemname ?? a.itemcode ?? '').toString();
+      const nameB = (b.itemname ?? b.itemcode ?? '').toString();
+      const byName = nameA.localeCompare(nameB, 'th', { sensitivity: 'base', numeric: true });
+      if (byName !== 0) return byName;
+      return (a.itemcode ?? '').localeCompare(b.itemcode ?? '', 'th', {
+        sensitivity: 'base',
+        numeric: true,
+      });
+    });
   }, [allItems, activeFilters.statusFilter]);
 
   const showCabinetMinMax = useMemo(
@@ -101,6 +110,8 @@ export default function ItemsPage() {
         setLoading(true);
         const baseParams: Record<string, string | number> = {
           status: 'ACTIVE',
+          sort_by: 'itemname',
+          sort_order: 'asc',
         };
         const kw = filters.keyword || filters.searchTerm;
         if (kw) baseParams.keyword = kw;

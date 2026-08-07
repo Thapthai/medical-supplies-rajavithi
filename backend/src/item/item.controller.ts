@@ -128,7 +128,7 @@ export class ItemController {
       page,
       limit,
       keyword,
-      sort_by || 'itemcode',
+      sort_by || 'itemname',
       sort_order || 'asc',
       cabinetId,
       departmentId,

@@ -149,7 +149,7 @@ export class ItemService {
     page: number,
     limit: number,
     keyword?: string,
-    sort_by: string = 'itemcode',
+    sort_by: string = 'itemname',
     sort_order: string = 'asc',
     cabinet_id?: number,
     department_id?: number,
@@ -193,10 +193,10 @@ export class ItemService {
       ];
       const validSortOrders = ['asc', 'desc'];
 
-      const field = validSortFields.includes(sort_by) ? sort_by : 'itemcode';
+      const field = validSortFields.includes(sort_by) ? sort_by : 'itemname';
       const order = validSortOrders.includes(sort_order)
         ? (sort_order as 'asc' | 'desc')
-        : ('desc' as 'asc' | 'desc');
+        : ('asc' as 'asc' | 'desc');
 
       const orderBy: any = {};
       orderBy[field] = order;
@@ -284,6 +284,7 @@ export class ItemService {
           ...where,
           item_status: 0, // Only active items
         },
+        orderBy,
         select: {
           itemcode: true,
           itemname: true,
@@ -683,42 +684,17 @@ export class ItemService {
 
       const sortedItems = itemsWithMeta
         .sort((a, b) => {
-          // 1) ต้องเติม (refill > 0) — ความสำคัญหลัก
-          if (a.needsRefill !== b.needsRefill) {
-            return a.needsRefill ? -1 : 1;
-          }
-
-          // 2) เรียงตามจำนวนที่ต้องเติมมาก → น้อย
-          if (a.refillQty !== b.refillQty) {
-            return b.refillQty - a.refillQty;
-          }
-
-          // 3) มี stock หมดอายุ
-          if (a.hasExpired !== b.hasExpired) {
-            return a.hasExpired ? -1 : 1;
-          }
-
-          // 4) stock ใกล้หมดอายุ (ภายใน 7 วัน)
-          if (a.hasNearExpire !== b.hasNearExpire) {
-            return a.hasNearExpire ? -1 : 1;
-          }
-
-          // 5) จำนวนชิ้นต่ำกว่า MIN
-          if (a.isLowStock !== b.isLowStock) {
-            return a.isLowStock ? -1 : 1;
-          }
-
-          // 6) วันหมดอายุเร็ว → ช้า
-          if (a.earliestExpireDate && b.earliestExpireDate) {
-            const aTime = (a.earliestExpireDate as Date).getTime();
-            const bTime = (b.earliestExpireDate as Date).getTime();
-            return aTime - bTime;
-          }
-
-          // 7) fallback: itemcode (A-Z)
+          // เรียงตามชื่ออุปกรณ์ (A–Z) เป็นหลัก
+          const nameA = (a.item.itemname ?? a.item.itemcode ?? '').toString();
+          const nameB = (b.item.itemname ?? b.item.itemcode ?? '').toString();
+          const byName = nameA.localeCompare(nameB, 'th', {
+            sensitivity: 'base',
+            numeric: true,
+          });
+          if (byName !== 0) return byName;
           const codeA = a.item.itemcode || '';
           const codeB = b.item.itemcode || '';
-          return codeA.localeCompare(codeB);
+          return codeA.localeCompare(codeB, 'th', { sensitivity: 'base', numeric: true });
         })
         .map((x) => x.item);
 
