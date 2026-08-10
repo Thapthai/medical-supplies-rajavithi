@@ -28,6 +28,27 @@ interface UpdateMinMaxDialogProps {
   onSuccess: () => void;
 }
 
+type QtyDraft = { stock_min: string; stock_max: string };
+
+function toDraft(n: number | null | undefined): string {
+  if (n == null || Number.isNaN(Number(n))) return '';
+  return String(Math.max(0, Math.trunc(Number(n))));
+}
+
+function parseQty(raw: string): number | null {
+  const t = raw.trim();
+  if (t === '') return null;
+  if (!/^\d+$/.test(t)) return null;
+  return Number.parseInt(t, 10);
+}
+
+/** รับเฉพาะตัวเลข 0–9 — ตัด leading zero (เช่น 011 → 11) ยกเว้นค่า 0 เดี่ยว */
+function sanitizeQtyInput(raw: string): string {
+  const digits = raw.replace(/\D/g, '');
+  if (digits === '') return '';
+  return String(Number.parseInt(digits, 10));
+}
+
 export default function UpdateMinMaxDialog({
   open,
   onOpenChange,
@@ -36,47 +57,55 @@ export default function UpdateMinMaxDialog({
   onSuccess,
 }: UpdateMinMaxDialogProps) {
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    stock_min: 0,
-    stock_max: 0,
+  const [formData, setFormData] = useState<QtyDraft>({
+    stock_min: '',
+    stock_max: '',
   });
   const [errors, setErrors] = useState<string[]>([]);
 
   useEffect(() => {
     if (item && open) {
       setFormData({
-        stock_min: item.stock_min ?? 0,
-        stock_max: item.stock_max ?? 0,
+        stock_min: toDraft(item.stock_min),
+        stock_max: toDraft(item.stock_max),
       });
       setErrors([]);
     }
   }, [item, open]);
 
-  const validateForm = () => {
-    const newErrors: string[] = [];
+  const minParsed = parseQty(formData.stock_min);
+  const maxParsed = parseQty(formData.stock_max);
+  const currentMin = item?.stock_min ?? 0;
+  const currentMax = item?.stock_max ?? 0;
+  const hasChange =
+    (minParsed != null && minParsed !== currentMin) ||
+    (maxParsed != null && maxParsed !== currentMax) ||
+    formData.stock_min === '' ||
+    formData.stock_max === '';
 
-    if (formData.stock_max < formData.stock_min) {
+  const validateForm = (): { ok: boolean; min: number; max: number } => {
+    const newErrors: string[] = [];
+    const min = parseQty(formData.stock_min);
+    const max = parseQty(formData.stock_max);
+
+    if (min == null) newErrors.push('กรุณาระบุ Stock Min เป็นจำนวนเต็ม ≥ 0');
+    if (max == null) newErrors.push('กรุณาระบุ Stock Max เป็นจำนวนเต็ม ≥ 0');
+    if (min != null && max != null && max < min) {
       newErrors.push('Stock Max ต้องมากกว่าหรือเท่ากับ Stock Min');
     }
 
-    if (formData.stock_min < 0) {
-      newErrors.push('Stock Min ต้องมากกว่าหรือเท่ากับ 0');
-    }
-
-    if (formData.stock_max < 0) {
-      newErrors.push('Stock Max ต้องมากกว่าหรือเท่ากับ 0');
-    }
-
     setErrors(newErrors);
-    return newErrors.length === 0;
+    if (newErrors.length > 0 || min == null || max == null) {
+      return { ok: false, min: min ?? 0, max: max ?? 0 };
+    }
+    return { ok: true, min, max };
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!validateForm()) {
-      return;
-    }
+    const { ok, min, max } = validateForm();
+    if (!ok) return;
 
     if (!item?.itemcode) {
       toast.error('ไม่พบข้อมูลสินค้า');
@@ -90,7 +119,11 @@ export default function UpdateMinMaxDialog({
 
     try {
       setLoading(true);
-      const response = await staffItemsApi.updateMinMax(item.itemcode, formData, cabinetId);
+      const response = await staffItemsApi.updateMinMax(
+        item.itemcode,
+        { stock_min: min, stock_max: max },
+        cabinetId,
+      );
 
       if (response.success) {
         toast.success('อัปเดต Min/Max ต่อตู้สำเร็จ');
@@ -118,15 +151,15 @@ export default function UpdateMinMaxDialog({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* ต้องเลือกตู้ */}
           {(cabinetId == null || Number.isNaN(cabinetId)) && (
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
               <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
-              <p className="text-sm text-amber-800">กรุณาเลือกตู้ใน Filter ด้านบนก่อน จึงจะบันทึก Min/Max ได้</p>
+              <p className="text-sm text-amber-800">
+                กรุณาเลือกตู้ใน Filter ด้านบนก่อน จึงจะบันทึก Min/Max ได้
+              </p>
             </div>
           )}
 
-          {/* Item Info */}
           <div className="bg-blue-50 p-3 rounded-lg space-y-2">
             <div className="text-sm">
               <span className="text-gray-600">รหัส: </span>
@@ -138,84 +171,103 @@ export default function UpdateMinMaxDialog({
             </div>
             <div className="text-sm">
               <span className="text-gray-600">Stock Balance: </span>
-              <span className="font-bold text-green-600">{item?.stock_balance?.toLocaleString() ?? 0}</span>
+              <span className="font-bold text-green-600">
+                {item?.stock_balance?.toLocaleString() ?? 0}
+              </span>
             </div>
             <div className="flex items-center space-x-4 pt-2 border-t border-blue-200">
               <div className="text-sm">
                 <span className="text-gray-600">Min ปัจจุบัน: </span>
-                <span className="font-bold text-blue-600">{item?.stock_min ?? 0}</span>
+                <span className="font-bold text-blue-600">{currentMin}</span>
               </div>
               <div className="text-sm">
                 <span className="text-gray-600">Max ปัจจุบัน: </span>
-                <span className="font-bold text-blue-600">{item?.stock_max ?? 0}</span>
+                <span className="font-bold text-blue-600">{currentMax}</span>
               </div>
             </div>
           </div>
 
-          {/* Errors */}
           {errors.length > 0 && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-3">
               <div className="flex items-start space-x-2">
                 <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
                 <div className="space-y-1">
                   {errors.map((error, idx) => (
-                    <p key={idx} className="text-sm text-red-600">{error}</p>
+                    <p key={idx} className="text-sm text-red-600">
+                      {error}
+                    </p>
                   ))}
                 </div>
               </div>
             </div>
           )}
 
-          {/* Form Fields */}
           <div className="grid grid-cols-2 gap-4">
-            {/* Stock Min */}
             <div>
               <Label htmlFor="stock_min">
                 Stock Min <span className="text-red-500">*</span>
               </Label>
               <Input
                 id="stock_min"
-                type="number"
-                min="0"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                autoComplete="off"
+                placeholder="เช่น 5"
                 value={formData.stock_min}
-                onChange={(e) => setFormData({ ...formData, stock_min: parseInt(e.target.value) || 0 })}
-                required
-                className={cn('font-medium', fieldInputClass)}
+                onFocus={(e) => e.target.select()}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    stock_min: sanitizeQtyInput(e.target.value),
+                  }))
+                }
+                className={cn('font-medium tabular-nums', fieldInputClass)}
               />
               <p className="text-xs text-gray-500 mt-1">จำนวนขั้นต่ำ</p>
             </div>
 
-            {/* Stock Max */}
             <div>
               <Label htmlFor="stock_max">
                 Stock Max <span className="text-red-500">*</span>
               </Label>
               <Input
                 id="stock_max"
-                type="number"
-                min="0"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                autoComplete="off"
+                placeholder="เช่น 20"
                 value={formData.stock_max}
-                onChange={(e) => setFormData({ ...formData, stock_max: parseInt(e.target.value) || 0 })}
-                required
-                className={cn('font-medium', fieldInputClass)}
+                onFocus={(e) => e.target.select()}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    stock_max: sanitizeQtyInput(e.target.value),
+                  }))
+                }
+                className={cn('font-medium tabular-nums', fieldInputClass)}
               />
               <p className="text-xs text-gray-500 mt-1">จำนวนสูงสุด</p>
             </div>
           </div>
 
-          {/* Change Summary */}
-          {(formData.stock_min !== (item?.stock_min ?? 0) || formData.stock_max !== (item?.stock_max ?? 0)) && (
+          {hasChange && minParsed != null && maxParsed != null && (
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
               <p className="text-sm font-medium text-yellow-800 mb-1">การเปลี่ยนแปลง:</p>
               <div className="space-y-1">
-                {formData.stock_min !== (item?.stock_min ?? 0) && (
+                {minParsed !== currentMin && (
                   <p className="text-xs text-yellow-700">
-                    • Stock Min: <span className="line-through">{item?.stock_min ?? 0}</span> → <span className="font-bold">{formData.stock_min}</span>
+                    • Stock Min:{' '}
+                    <span className="line-through">{currentMin}</span> →{' '}
+                    <span className="font-bold">{minParsed}</span>
                   </p>
                 )}
-                {formData.stock_max !== (item?.stock_max ?? 0) && (
+                {maxParsed !== currentMax && (
                   <p className="text-xs text-yellow-700">
-                    • Stock Max: <span className="line-through">{item?.stock_max ?? 0}</span> → <span className="font-bold">{formData.stock_max}</span>
+                    • Stock Max:{' '}
+                    <span className="line-through">{currentMax}</span> →{' '}
+                    <span className="font-bold">{maxParsed}</span>
                   </p>
                 )}
               </div>
@@ -243,4 +295,3 @@ export default function UpdateMinMaxDialog({
     </Dialog>
   );
 }
-

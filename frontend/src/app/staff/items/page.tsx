@@ -72,7 +72,16 @@ export default function ItemsPage() {
         activeFilters.statusFilter === 'active' ? item.item_status === 0 : item.item_status !== 0,
       );
     }
-    return filtered;
+    return [...filtered].sort((a, b) => {
+      const nameA = (a.itemname ?? a.itemcode ?? '').toString();
+      const nameB = (b.itemname ?? b.itemcode ?? '').toString();
+      const byName = nameA.localeCompare(nameB, 'th', { sensitivity: 'base', numeric: true });
+      if (byName !== 0) return byName;
+      return (a.itemcode ?? '').localeCompare(b.itemcode ?? '', 'th', {
+        sensitivity: 'base',
+        numeric: true,
+      });
+    });
   }, [allItems, activeFilters.statusFilter]);
 
   const showCabinetMinMax = useMemo(
@@ -106,6 +115,8 @@ export default function ItemsPage() {
         setLoading(true);
         const baseParams: Record<string, string | number> = {
           status: 'ACTIVE',
+          sort_by: 'itemname',
+          sort_order: 'asc',
         };
         const kw = (filters.keyword || filters.searchTerm || '').trim();
         if (kw) baseParams.keyword = kw;
@@ -374,15 +385,17 @@ export default function ItemsPage() {
           onPrintSticker={handleQuickPrintSticker}
           onPageChange={handlePageChange}
           headerActions={
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex shrink-0 gap-2">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleDownloadCabinetStockExcel}
                 disabled={reportLoading !== null}
               >
-                <Download className="mr-1.5 h-4 w-4" />
-                {reportLoading === 'excel' ? 'กำลังโหลด...' : 'Excel'}
+                <Download className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">
+                  {reportLoading === 'excel' ? 'กำลังโหลด...' : 'Excel'}
+                </span>
               </Button>
               <Button
                 variant="outline"
@@ -390,8 +403,10 @@ export default function ItemsPage() {
                 onClick={handleDownloadCabinetStockPdf}
                 disabled={reportLoading !== null}
               >
-                <Download className="mr-1.5 h-4 w-4" />
-                {reportLoading === 'pdf' ? 'กำลังโหลด...' : 'PDF'}
+                <Download className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">
+                  {reportLoading === 'pdf' ? 'กำลังโหลด...' : 'PDF'}
+                </span>
               </Button>
             </div>
           }
