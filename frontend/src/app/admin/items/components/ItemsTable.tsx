@@ -381,7 +381,7 @@ export default function ItemsTable({
   const [printTarget, setPrintTarget] = useState<{ item: Item; maxCopies: number } | null>(null);
   const [printCopiesInput, setPrintCopiesInput] = useState("1");
 
-  /** ไม่แสดงแถวที่จำนวนในตู้ = 0 — ยกเว้นเมื่อเลือกตู้และ refill > 0 — เรียงตามชื่ออุปกรณ์ */
+  /** ไม่แสดงแถวที่จำนวนในตู้ = 0 — ยกเว้นเมื่อ refill > 0; ต้องเติมขึ้นก่อน แล้วเรียงชื่อ */
   const visibleItems = useMemo(() => {
     return items
       .filter((item) => {
@@ -390,6 +390,12 @@ export default function ItemsTable({
         return qty !== 0 || refill > 0;
       })
       .sort((a, b) => {
+        const refillA = Math.max(0, Number((a as Item & { refill_qty?: number }).refill_qty ?? 0));
+        const refillB = Math.max(0, Number((b as Item & { refill_qty?: number }).refill_qty ?? 0));
+        const needA = refillA > 0;
+        const needB = refillB > 0;
+        if (needA !== needB) return needA ? -1 : 1;
+        if (refillA !== refillB) return refillB - refillA;
         const nameA = (a.itemname ?? a.itemcode ?? "").toString();
         const nameB = (b.itemname ?? b.itemcode ?? "").toString();
         const byName = nameA.localeCompare(nameB, "th", {

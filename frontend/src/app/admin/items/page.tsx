@@ -68,6 +68,12 @@ export default function ItemsPage() {
       );
     }
     return [...filtered].sort((a, b) => {
+      const refillA = Math.max(0, Number(a.refill_qty ?? 0));
+      const refillB = Math.max(0, Number(b.refill_qty ?? 0));
+      const needA = refillA > 0;
+      const needB = refillB > 0;
+      if (needA !== needB) return needA ? -1 : 1;
+      if (refillA !== refillB) return refillB - refillA;
       const nameA = (a.itemname ?? a.itemcode ?? '').toString();
       const nameB = (b.itemname ?? b.itemcode ?? '').toString();
       const byName = nameA.localeCompare(nameB, 'th', { sensitivity: 'base', numeric: true });
