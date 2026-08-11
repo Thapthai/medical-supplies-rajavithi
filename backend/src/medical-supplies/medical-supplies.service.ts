@@ -3533,6 +3533,7 @@ export class MedicalSuppliesService {
       // Build WHERE conditions for raw SQL
       const sqlConditions: Prisma.Sql[] = [
         Prisma.sql`ist.IsStock = 0`,
+        Prisma.sql`ist.IsStatus = 5`,
         Prisma.sql`ist.RfidCode <> ''`,
       ];
 
@@ -3795,6 +3796,7 @@ export class MedicalSuppliesService {
       // Build WHERE conditions — สอดคล้อง getDispensedItems แต่ IsStock = 1 (ชิ้นในตู้หลังเติม)
       const sqlConditions: Prisma.Sql[] = [
         Prisma.sql`ist.IsStock = 1`,
+        Prisma.sql`ist.IsStatus = 5`,
         Prisma.sql`ist.RfidCode <> ''`,
       ];
 
