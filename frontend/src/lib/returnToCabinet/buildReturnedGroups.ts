@@ -5,7 +5,7 @@ export interface ReturnedGroup {
   key: string;
   itemcode: string;
   itemname: string;
-  /** วันที่เติม (YYYY-MM-DD UTC) ที่ใช้จัดกลุ่ม */
+  /** วันที่เติม (YYYY-MM-DD UTC) */
   returnDate: string;
   returnTime: string;
   cabinetUserName: string;
@@ -13,46 +13,48 @@ export interface ReturnedGroup {
   totalQty: number;
 }
 
-function timeMs(v?: string): number {
+function asDateTimeString(v?: string | Date | null): string {
+  if (v == null || v === '') return '';
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? '' : v.toISOString();
+  return String(v).trim();
+}
+
+function timeMs(v?: string | Date | null): number {
+  if (v instanceof Date) {
+    const t = v.getTime();
+    return Number.isFinite(t) ? t : 0;
+  }
   const t = new Date(v ?? 0).getTime();
   return Number.isFinite(t) ? t : 0;
 }
 
-/** คีย์ผู้เติม — ไม่ยุบรายการที่ไม่มีชื่อรวมกันเมื่อคนละ user/ตู้ */
-function requesterGroupKey(item: DispensedItem): string {
-  const name = (item.cabinetUserName ?? '').trim();
-  if (name) return `n:${name}`;
-  const uid = item.CabinetUserID;
-  if (uid != null && Number(uid) > 0) return `u:${uid}`;
-  const stock = item.StockID;
-  if (stock != null && Number(stock) > 0) return `s:${stock}`;
-  const rowId = item.RowID;
-  if (rowId != null && Number(rowId) > 0) return `r:${rowId}`;
-  return 'anon';
-}
-
 function groupKeyParts(item: DispensedItem): {
   itemcode: string;
+  itemname: string;
   returnDate: string;
-  cabinetUserName: string;
+  returnTime: string;
+  timeKey: number;
   key: string;
 } {
-  const itemcode = (item.itemcode ?? '').trim() || '-';
+  const itemcode = String(item.itemcode ?? '').trim() || '-';
+  const itemname = String(item.itemname ?? '').trim() || itemcode;
+  const returnTime = asDateTimeString(item.modifyDate);
+  const timeKey = timeMs(item.modifyDate);
   const returnDate = toUtcYyyyMmDd(item.modifyDate) || '-';
-  const cabinetUserName = (item.cabinetUserName ?? '').trim();
-  const requesterKey = requesterGroupKey(item);
   return {
     itemcode,
+    itemname,
     returnDate,
-    cabinetUserName,
-    key: `${itemcode}|${returnDate}|${requesterKey}`,
+    returnTime,
+    timeKey,
+    key: `${timeKey}|${itemname}`,
   };
 }
 
 /**
- * จัดกลุ่มรายการเติมตาม รหัสอุปกรณ์ + วันที่เติม + ชื่อผู้เติม
+ * จัดกลุ่มรายการเติมตาม เวลาเติม + ชื่ออุปกรณ์
  * — รายการในกลุ่มเรียงเวลา DESC
- * — กลุ่มเรียงตามเวลาเติมล่าสุดในกลุ่ม DESC
+ * — กลุ่มเรียงตามเวลา DESC แล้วตามชื่ออุปกรณ์ ASC
  */
 export function buildReturnedGroups(items: DispensedItem[]): ReturnedGroup[] {
   if (items.length === 0) return [];
@@ -76,15 +78,19 @@ export function buildReturnedGroups(items: DispensedItem[]): ReturnedGroup[] {
     groups.push({
       key: parts.key,
       itemcode: parts.itemcode,
-      itemname: first?.itemname ?? parts.itemcode,
+      itemname: parts.itemname,
       returnDate: parts.returnDate,
-      returnTime: first?.modifyDate ?? '',
-      cabinetUserName: parts.cabinetUserName,
+      returnTime: asDateTimeString(first?.modifyDate) || parts.returnTime,
+      cabinetUserName: String(first?.cabinetUserName ?? '').trim(),
       items: sortedItems,
       totalQty,
     });
   }
 
-  groups.sort((a, b) => timeMs(b.returnTime) - timeMs(a.returnTime));
+  groups.sort((a, b) => {
+    const t = timeMs(b.returnTime) - timeMs(a.returnTime);
+    if (t !== 0) return t;
+    return a.itemname.localeCompare(b.itemname, 'th', { sensitivity: 'base' });
+  });
   return groups;
 }

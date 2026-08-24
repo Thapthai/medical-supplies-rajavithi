@@ -1,7 +1,7 @@
 export type DispensedGroupRow = {
   itemcode?: string;
   itemname?: string;
-  modifyDate?: string;
+  modifyDate?: string | Date;
   qty?: number;
   cabinetUserName?: string;
   CabinetUserID?: number;
@@ -12,63 +12,66 @@ export type DispensedGroupRow = {
 export interface DispensedReportGroup<T extends DispensedGroupRow = DispensedGroupRow> {
   itemcode: string;
   itemname: string;
-  /** วันที่เบิก YYYY-MM-DD (UTC) ที่ใช้จัดกลุ่ม */
+  /** วันที่เบิก YYYY-MM-DD (UTC) */
   dispenseDate: string;
-  /** เวลาเบิกล่าสุดในกลุ่ม (ใช้เรียงลำดับกลุ่ม) */
+  /** เวลาเบิกของกลุ่ม (ใช้เรียงลำดับกลุ่ม) */
   dispenseTime: string;
   cabinetUserName: string;
   totalQty: number;
   items: T[];
 }
 
-function timeMs(v?: string): number {
+function asDateTimeString(v?: string | Date | null): string {
+  if (v == null || v === '') return '';
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? '' : v.toISOString();
+  return String(v).trim();
+}
+
+function timeMs(v?: string | Date | null): number {
+  if (v instanceof Date) {
+    const t = v.getTime();
+    return Number.isFinite(t) ? t : 0;
+  }
   const t = new Date(v ?? 0).getTime();
   return Number.isFinite(t) ? t : 0;
 }
 
 /** วันที่ปฏิทิน UTC เป็น YYYY-MM-DD */
-function toUtcYyyyMmDd(value?: string): string {
-  if (!value) return '-';
-  const d = new Date(value);
+function toUtcYyyyMmDd(value?: string | Date | null): string {
+  const s = asDateTimeString(value);
+  if (!s) return '-';
+  const d = new Date(s);
   if (Number.isNaN(d.getTime())) return '-';
   return d.toLocaleDateString('en-CA', { timeZone: 'UTC' });
 }
 
-/** คีย์ผู้เบิก — ไม่ยุบรายการที่ไม่มีชื่อรวมกันเมื่อคนละ user/ตู้ */
-function requesterGroupKey(item: DispensedGroupRow): string {
-  const name = (item.cabinetUserName ?? '').trim();
-  if (name) return `n:${name}`;
-  const uid = item.CabinetUserID;
-  if (uid != null && Number(uid) > 0) return `u:${uid}`;
-  const stock = item.StockID;
-  if (stock != null && Number(stock) > 0) return `s:${stock}`;
-  const rowId = item.RowID;
-  if (rowId != null && Number(rowId) > 0) return `r:${rowId}`;
-  return 'anon';
-}
-
 function groupKeyParts(item: DispensedGroupRow): {
   itemcode: string;
+  itemname: string;
   dispenseDate: string;
-  cabinetUserName: string;
+  dispenseTime: string;
+  timeKey: number;
   key: string;
 } {
-  const itemcode = (item.itemcode ?? '').trim() || '-';
+  const itemcode = String(item.itemcode ?? '').trim() || '-';
+  const itemname = String(item.itemname ?? '').trim() || itemcode;
+  const dispenseTime = asDateTimeString(item.modifyDate);
+  const timeKey = timeMs(item.modifyDate);
   const dispenseDate = toUtcYyyyMmDd(item.modifyDate);
-  const cabinetUserName = (item.cabinetUserName ?? '').trim();
-  const requesterKey = requesterGroupKey(item);
   return {
     itemcode,
+    itemname,
     dispenseDate,
-    cabinetUserName,
-    key: `${itemcode}|${dispenseDate}|${requesterKey}`,
+    dispenseTime,
+    timeKey,
+    key: `${timeKey}|${itemname}`,
   };
 }
 
 /**
- * จัดกลุ่มรายการเบิกตาม รหัสอุปกรณ์ + วันที่เบิก + ชื่อผู้เบิก
+ * จัดกลุ่มรายการเบิกตาม เวลาเบิก + ชื่ออุปกรณ์
  * — รายการในกลุ่มเรียงเวลาเบิก DESC
- * — กลุ่มเรียงตามเวลาเบิกล่าสุดในกลุ่ม DESC
+ * — กลุ่มเรียงตามเวลา DESC แล้วตามชื่ออุปกรณ์ ASC
  */
 export function buildDispensedGroups<T extends DispensedGroupRow>(
   items: T[],
@@ -93,16 +96,20 @@ export function buildDispensedGroups<T extends DispensedGroupRow>(
     const parts = groupKeyParts(first);
     groups.push({
       itemcode: parts.itemcode,
-      itemname: first?.itemname ?? parts.itemcode,
+      itemname: parts.itemname,
       dispenseDate: parts.dispenseDate,
-      dispenseTime: first?.modifyDate ?? '',
-      cabinetUserName: parts.cabinetUserName,
+      dispenseTime: asDateTimeString(first?.modifyDate) || parts.dispenseTime,
+      cabinetUserName: String(first?.cabinetUserName ?? '').trim(),
       totalQty,
       items: sortedItems,
     });
   }
 
-  groups.sort((a, b) => timeMs(b.dispenseTime) - timeMs(a.dispenseTime));
+  groups.sort((a, b) => {
+    const t = timeMs(b.dispenseTime) - timeMs(a.dispenseTime);
+    if (t !== 0) return t;
+    return a.itemname.localeCompare(b.itemname, 'th', { sensitivity: 'base' });
+  });
   return groups;
 }
 

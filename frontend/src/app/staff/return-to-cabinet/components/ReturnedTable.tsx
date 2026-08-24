@@ -190,7 +190,7 @@ export default function ReturnedTable({
 
   const descriptionText =
     items.length > 0
-      ? `แสดง ${paginatedGroups.length} กลุ่มในหน้านี้ (สูงสุด ${groupsPerPage} กลุ่มต่อหน้า) · รวม ${totalGroups} กลุ่ม จาก ${totalRawItems} รายการดิบ (รวม ${totalReturnedQty.toLocaleString()} ชิ้น) · จัดกลุ่มตามรหัสอุปกรณ์ + วันที่เติม + ชื่อผู้เติม`
+      ? `แสดง ${paginatedGroups.length} กลุ่มในหน้านี้ (สูงสุด ${groupsPerPage} กลุ่มต่อหน้า) · รวม ${totalGroups} กลุ่ม จาก ${totalRawItems} รายการดิบ (รวม ${totalReturnedQty.toLocaleString()} ชิ้น) · จัดกลุ่มตามเวลาเติม + ชื่ออุปกรณ์ · เรียงเวลาล่าสุดก่อน`
       : 'รายการอุปกรณ์ทั้งหมดที่เติมเข้าตู้ SmartCabinet';
 
   return (
