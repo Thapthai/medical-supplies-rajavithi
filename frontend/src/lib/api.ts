@@ -32,6 +32,9 @@ function staffPortalApiPath(url: string | undefined): boolean {
   if (url.startsWith('/staff-users')) return false;
   if (url.startsWith('/sticker-print')) return true;
   if (url.startsWith('/department-dispense')) return true;
+  // Pre-print sticker (staff) — โหลดยี่ห้อ/รายการ + ส่งออกรายงาน
+  if (url.startsWith('/items/brands') || url.startsWith('/items/master')) return true;
+  if (url.startsWith('/reports/pre-print-stickers')) return true;
   return url.startsWith('/staff/') || url === '/staff';
 }
 
@@ -226,6 +229,19 @@ export const itemsApi = {
     item_status_filter?: 'all' | 'active' | 'inactive' | string;
   }): Promise<PaginatedResponse<Item>> => {
     const response = await api.get('/items/master', { params: query });
+    return response.data;
+  },
+
+  /** รายการยี่ห้อ (ข้อความก่อน " + " ใน itemname) ไม่ซ้ำ */
+  getBrands: async (keyword?: string): Promise<{
+    success: boolean;
+    data: string[];
+    total: number;
+    message?: string;
+  }> => {
+    const response = await api.get('/items/brands', {
+      params: keyword?.trim() ? { keyword: keyword.trim() } : undefined,
+    });
     return response.data;
   },
 
@@ -2359,6 +2375,39 @@ export const weighingApi = {
 };
 
 // =========================== Sticker print (SATO SBPL) ===========================
+export type PrePrintStickerDetailRow = {
+  id: number;
+  line_order: number;
+  itemcode: string;
+  item_name: string | null;
+  expire_date: string | null;
+  copies: number;
+  is_main: boolean;
+  lot_no: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PrePrintStickerDocument = {
+  id: number;
+  doc_no: string;
+  status: string;
+  remark: string | null;
+  total_lines: number;
+  total_sheets: number;
+  created_by_user_id: number | null;
+  created_at: string;
+  updated_at: string;
+  createdBy?: {
+    id: number;
+    fname: string | null;
+    lname: string | null;
+    email: string | null;
+  } | null;
+  details?: PrePrintStickerDetailRow[];
+  _count?: { details: number };
+};
+
 export const stickerPrintApi = {
   printLabel: async (body?: { ip?: string; port?: number | string }): Promise<{
     success: true;
@@ -2407,6 +2456,170 @@ export const stickerPrintApi = {
     items: { itemcode: string; copies: number; bytesSent: number }[];
   }> => {
     const response = await api.post('/sticker-print/printLabel-items', body);
+    return response.data;
+  },
+
+  listPrePrintStickers: async (params?: {
+    page?: number;
+    limit?: number;
+    keyword?: string;
+    start_date?: string;
+    end_date?: string;
+  }): Promise<{
+    success: boolean;
+    data?: PrePrintStickerDocument[];
+    total?: number;
+    page?: number;
+    limit?: number;
+    lastPage?: number;
+    message?: string;
+  }> => {
+    const response = await api.get('/sticker-print/pre-print-stickers', { params });
+    return response.data;
+  },
+
+  getPrePrintSticker: async (
+    id: number,
+  ): Promise<{
+    success: boolean;
+    data?: PrePrintStickerDocument;
+    message?: string;
+  }> => {
+    const response = await api.get(`/sticker-print/pre-print-stickers/${id}`);
+    return response.data;
+  },
+
+  downloadPrePrintStickerPdf: async (id: number): Promise<void> => {
+    const response = await api.post(`/sticker-print/pre-print-stickers/${id}/export/pdf`);
+    const res = response.data as {
+      success?: boolean;
+      data?: { buffer?: string; filename?: string; contentType?: string };
+      error?: string;
+    };
+    if (!res?.success || !res?.data?.buffer) {
+      throw new Error(res?.error || 'ไม่สามารถสร้างไฟล์ PDF ได้');
+    }
+    const binary = atob(res.data.buffer);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const blob = new Blob([bytes], {
+      type: res.data.contentType || 'application/pdf',
+    });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', res.data.filename || `pre_print_sticker_${id}.pdf`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
+  downloadPrePrintStickersReportExcel: async (params?: {
+    keyword?: string;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<void> => {
+    const response = await api.post('/reports/pre-print-stickers/excel', {
+      keyword: params?.keyword,
+      startDate: params?.startDate,
+      endDate: params?.endDate,
+    });
+    const res = response.data as {
+      success?: boolean;
+      data?: { buffer?: string; filename?: string; contentType?: string };
+      error?: string;
+    };
+    if (!res?.success || !res?.data?.buffer) {
+      throw new Error(res?.error || 'ไม่สามารถสร้างไฟล์ Excel ได้');
+    }
+    const binary = atob(res.data.buffer);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const blob = new Blob([bytes], {
+      type: res.data.contentType || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute(
+      'download',
+      res.data.filename || `pre_print_sticker_report_${new Date().toISOString().split('T')[0]}.xlsx`,
+    );
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
+  downloadPrePrintStickersReportPdf: async (params?: {
+    keyword?: string;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<void> => {
+    const response = await api.post('/reports/pre-print-stickers/pdf', {
+      keyword: params?.keyword,
+      startDate: params?.startDate,
+      endDate: params?.endDate,
+    });
+    const res = response.data as {
+      success?: boolean;
+      data?: { buffer?: string; filename?: string; contentType?: string };
+      error?: string;
+    };
+    if (!res?.success || !res?.data?.buffer) {
+      throw new Error(res?.error || 'ไม่สามารถสร้างไฟล์ PDF ได้');
+    }
+    const binary = atob(res.data.buffer);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const blob = new Blob([bytes], {
+      type: res.data.contentType || 'application/pdf',
+    });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute(
+      'download',
+      res.data.filename || `pre_print_sticker_report_${new Date().toISOString().split('T')[0]}.pdf`,
+    );
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
+  createPrePrintSticker: async (body: {
+    remark?: string;
+    lines: Array<{
+      itemcode: string;
+      item_name?: string;
+      expire_date?: string;
+      copies: number;
+      is_main?: boolean;
+      lot_no?: string;
+    }>;
+  }): Promise<{
+    success: boolean;
+    data?: {
+      id: number;
+      doc_no: string;
+      status: string;
+      total_lines: number;
+      total_sheets: number;
+      details: Array<{
+        id: number;
+        itemcode: string;
+        item_name: string | null;
+        expire_date: string | null;
+        copies: number;
+        is_main: boolean;
+        lot_no: string | null;
+      }>;
+    };
+    message?: string;
+  }> => {
+    const response = await api.post('/sticker-print/pre-print-stickers', body);
     return response.data;
   },
 };

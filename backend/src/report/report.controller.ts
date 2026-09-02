@@ -467,6 +467,34 @@ export class ReportServiceController {
     }
   }
 
+  @Post('pre-print-stickers/excel')
+  async generatePrePrintStickersExcel(@Body() data: {
+    keyword?: string;
+    startDate?: string;
+    endDate?: string;
+  }) {
+    try {
+      const result = await this.reportServiceService.generatePrePrintStickerReportExcel(data);
+      return toFileResponse(result.buffer, result.filename, EXCEL_CONTENT);
+    } catch (error: any) {
+      return { success: false, error: error?.message };
+    }
+  }
+
+  @Post('pre-print-stickers/pdf')
+  async generatePrePrintStickersPdf(@Body() data: {
+    keyword?: string;
+    startDate?: string;
+    endDate?: string;
+  }) {
+    try {
+      const result = await this.reportServiceService.generatePrePrintStickerReportPdf(data);
+      return toFileResponse(result.buffer, result.filename, PDF_CONTENT);
+    } catch (error: any) {
+      return { success: false, error: error?.message };
+    }
+  }
+
   @Post('cabinet-stock/excel')
   async generateCabinetStockExcel(@Body() data: {
     cabinetId?: number;

@@ -1,0 +1,43 @@
+import { MAX_TOTAL_LABELS } from './constants';
+
+/** จำกัดจำนวนแผ่นให้อยู่ใน 1..maxCap (cap เป็น 0 คืน 0) */
+export function clampCopies(raw: number, maxCap: number): number {
+  const cap = Math.max(0, Math.floor(maxCap));
+  if (cap <= 0) return 0;
+  if (!Number.isFinite(raw)) return 1;
+  return Math.min(cap, Math.max(1, Math.floor(raw)));
+}
+
+/** อ่านค่าจำนวนจาก state (ว่าง = 0) */
+export function resolveCopies(raw: number | '', maxCap: number): number {
+  if (raw === '') return 0;
+  return clampCopies(raw, maxCap);
+}
+
+/** เพดานจำนวนแผ่นต่อรายการ — หน้าเตรียมพิมพ์ใช้เพดานรวมของระบบ */
+export function maxCopiesPerItem(): number {
+  return MAX_TOTAL_LABELS;
+}
+
+export function generatePageNumbers(currentPage: number, totalPages: number): (number | string)[] {
+  const pages: (number | string)[] = [];
+  const maxVisible = 5;
+  if (totalPages <= maxVisible) {
+    for (let i = 1; i <= totalPages; i++) pages.push(i);
+  } else if (currentPage <= 3) {
+    for (let i = 1; i <= 4; i++) pages.push(i);
+    pages.push('...');
+    pages.push(totalPages);
+  } else if (currentPage >= totalPages - 2) {
+    pages.push(1);
+    pages.push('...');
+    for (let i = totalPages - 3; i <= totalPages; i++) pages.push(i);
+  } else {
+    pages.push(1);
+    pages.push('...');
+    for (let i = currentPage - 1; i <= currentPage + 1; i++) pages.push(i);
+    pages.push('...');
+    pages.push(totalPages);
+  }
+  return pages;
+}

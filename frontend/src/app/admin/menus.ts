@@ -126,6 +126,12 @@ export const adminMenuItems: StaffMenuItem[] = [
         icon: FileBarChart,
       },
       {
+        name: 'เตรียมพิมพ์สติ๊กเกอร์',
+        href: '/admin/pre-print-sticker',
+        description: 'เลือกยี่ห้อ → เตรียมพิมพ์สติ๊กเกอร์',
+        icon: Printer,
+      },
+      {
         name: 'บันทึกใช้อุปกรณ์กับคนไข้',
         href: '/admin/medical-supplies',
         description: 'บันทึกใช้อุปกรณ์กับคนไข้ จากตู้ SmartCabinet',

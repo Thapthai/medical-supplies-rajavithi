@@ -40,6 +40,8 @@ import { DispensedItemsForPatientsExcelService } from './services/dispensed-item
 import { DispensedItemsForPatientsPdfService } from './services/dispensed-items-for-patients-pdf.service';
 import { ItemBorrowReportExcelService } from './services/item-borrow-report-excel.service';
 import { ItemBorrowReportPdfService } from './services/item-borrow-report-pdf.service';
+import { PrePrintStickerReportExcelService } from './services/pre-print-sticker-report-excel.service';
+import { PrePrintStickerReportPdfService } from './services/pre-print-sticker-report-pdf.service';
 import { ItemMasterUploadService } from './services/item-master-upload.service';
 @Module({
   imports: [PrismaModule, ItemModule, MedicalSuppliesModule, WeighingModule],
@@ -81,6 +83,8 @@ import { ItemMasterUploadService } from './services/item-master-upload.service';
     DispensedItemsForPatientsPdfService,
     ItemBorrowReportExcelService,
     ItemBorrowReportPdfService,
+    PrePrintStickerReportExcelService,
+    PrePrintStickerReportPdfService,
     ItemMasterUploadService,
   ],
   exports: [ReportServiceService, ItemMasterUploadService],

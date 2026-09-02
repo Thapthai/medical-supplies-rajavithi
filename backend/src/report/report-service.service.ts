@@ -13,6 +13,12 @@ import { ItemComparisonPdfService } from './services/item-comparison-pdf.service
 import { VendingMappingReportExcelService } from './services/vending-mapping-report-excel.service';
 import { VendingMappingReportPdfService } from './services/vending-mapping-report-pdf.service';
 import { UnmappedDispensedReportExcelService } from './services/unmapped-dispensed-report-excel.service';
+
+function getCaughtErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (error != null) return String(error);
+  return 'Unknown error';
+}
 import { UnusedDispensedReportExcelService } from './services/unused-dispensed-report-excel.service';
 import { ReturnReportExcelService, ReturnReportData } from './services/return-report-excel.service';
 import { ReturnReportPdfService } from './services/return-report-pdf.service';
@@ -26,6 +32,12 @@ import {
   ItemBorrowReportRow,
 } from './services/item-borrow-report-excel.service';
 import { ItemBorrowReportPdfService } from './services/item-borrow-report-pdf.service';
+import {
+  PrePrintStickerReportExcelService,
+  PrePrintStickerReportData,
+  PrePrintStickerReportRow,
+} from './services/pre-print-sticker-report-excel.service';
+import { PrePrintStickerReportPdfService } from './services/pre-print-sticker-report-pdf.service';
 import { buildReturnedGroups } from './utils/build-returned-groups';
 import { buildDispensedGroups, sortDispensedItemsForReport } from './utils/build-dispensed-groups';
 import { isValidCabinetFilterId } from './utils/cabinet-stock-row-highlight.util';
@@ -98,6 +110,8 @@ export class ReportServiceService {
     private readonly returnToCabinetReportPdfService: ReturnToCabinetReportPdfService,
     private readonly itemBorrowReportExcelService: ItemBorrowReportExcelService,
     private readonly itemBorrowReportPdfService: ItemBorrowReportPdfService,
+    private readonly prePrintStickerReportExcelService: PrePrintStickerReportExcelService,
+    private readonly prePrintStickerReportPdfService: PrePrintStickerReportPdfService,
     private readonly dispensedItemsExcelService: DispensedItemsExcelService,
     private readonly dispensedItemsPdfService: DispensedItemsPdfService,
     private readonly cabinetStockReportExcelService: CabinetStockReportExcelService,
@@ -233,7 +247,7 @@ export class ReportServiceService {
       return { buffer, filename };
     } catch (error) {
       console.error('[Report Service] Error generating Excel:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to generate Excel report: ${errorMessage}`);
     }
   }
@@ -273,7 +287,7 @@ export class ReportServiceService {
       return { buffer, filename };
     } catch (error) {
       console.error('[Report Service] Error generating PDF:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to generate PDF report: ${errorMessage}`);
     }
   }
@@ -368,7 +382,7 @@ export class ReportServiceService {
       return { buffer, filename };
     } catch (error) {
       console.error('[Report Service] Error generating Equipment Usage Excel:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to generate Equipment Usage Excel report: ${errorMessage}`);
     }
   }
@@ -463,7 +477,7 @@ export class ReportServiceService {
       return { buffer, filename };
     } catch (error) {
       console.error('[Report Service] Error generating Equipment Usage PDF:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to generate Equipment Usage PDF report: ${errorMessage}`);
     }
   }
@@ -564,7 +578,7 @@ export class ReportServiceService {
       return { buffer, filename };
     } catch (error) {
       console.error('[Report Service] Error generating Equipment Disbursement Excel:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to generate Equipment Disbursement Excel report: ${errorMessage}`);
     }
   }
@@ -666,7 +680,7 @@ export class ReportServiceService {
       return { buffer, filename };
     } catch (error) {
       console.error('[Report Service] Error generating Equipment Disbursement PDF:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to generate Equipment Disbursement PDF report: ${errorMessage}`);
     }
   }
@@ -782,7 +796,7 @@ export class ReportServiceService {
       return { buffer, filename };
     } catch (error) {
       console.error('[Report Service] Error generating Item Comparison Excel:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to generate Item Comparison Excel report: ${errorMessage}`);
     }
   }
@@ -898,7 +912,7 @@ export class ReportServiceService {
       return { buffer, filename };
     } catch (error) {
       console.error('[Report Service] Error generating Item Comparison PDF:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to generate Item Comparison PDF report: ${errorMessage}`);
     }
   }
@@ -1035,7 +1049,7 @@ export class ReportServiceService {
       return { buffer, filename };
     } catch (error) {
       console.error('[Report Service] Error generating Vending Mapping Excel:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to generate Vending Mapping Excel report: ${errorMessage}`);
     }
   }
@@ -1172,7 +1186,7 @@ export class ReportServiceService {
       return { buffer, filename };
     } catch (error) {
       console.error('[Report Service] Error generating Vending Mapping PDF:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to generate Vending Mapping PDF report: ${errorMessage}`);
     }
   }
@@ -1283,7 +1297,7 @@ export class ReportServiceService {
       return { buffer, filename };
     } catch (error) {
       console.error('[Report Service] Error generating Unmapped Dispensed Excel:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to generate Unmapped Dispensed Excel report: ${errorMessage}`);
     }
   }
@@ -1371,7 +1385,7 @@ export class ReportServiceService {
       return { buffer, filename };
     } catch (error) {
       console.error('[Report Service] Error generating Unused Dispensed Excel:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to generate Unused Dispensed Excel report: ${errorMessage}`);
     }
   }
@@ -1498,7 +1512,7 @@ export class ReportServiceService {
       };
     } catch (error) {
       console.error('[Report Service] Error getting Vending Mapping data:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to get Vending Mapping data: ${errorMessage}`);
     }
   }
@@ -1602,7 +1616,7 @@ export class ReportServiceService {
       };
     } catch (error) {
       console.error('[Report Service] Error getting Unmapped Dispensed data:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to get Unmapped Dispensed data: ${errorMessage}`);
     }
   }
@@ -1717,7 +1731,7 @@ export class ReportServiceService {
       };
     } catch (error) {
       console.error('[Report Service] Error getting Unused Dispensed data:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to get Unused Dispensed data: ${errorMessage}`);
     }
   }
@@ -1787,7 +1801,7 @@ export class ReportServiceService {
       };
     } catch (error) {
       console.error('[Report Service] Error getting Cancel Bill data:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to get Cancel Bill data: ${errorMessage}`);
     }
   }
@@ -1821,7 +1835,7 @@ export class ReportServiceService {
       };
     } catch (error) {
       console.error('[Report Service] Error getting Return Report data:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to get Return Report data: ${errorMessage}`);
     }
   }
@@ -1868,7 +1882,7 @@ export class ReportServiceService {
       return buffer;
     } catch (error) {
       console.error('[Report Service] Error generating Return Report Excel:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to generate Return Report Excel: ${errorMessage}`);
     }
   }
@@ -1915,7 +1929,7 @@ export class ReportServiceService {
       return buffer;
     } catch (error) {
       console.error('[Report Service] Error generating Return Report PDF:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to generate Return Report PDF: ${errorMessage}`);
     }
   }
@@ -1949,7 +1963,7 @@ export class ReportServiceService {
       return buffer;
     } catch (error) {
       console.error('[Report Service] Error generating Cancel Bill Report Excel:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to generate Cancel Bill Report Excel: ${errorMessage}`);
     }
   }
@@ -1983,7 +1997,7 @@ export class ReportServiceService {
       return buffer;
     } catch (error) {
       console.error('[Report Service] Error generating Cancel Bill Report PDF:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to generate Cancel Bill Report PDF: ${errorMessage}`);
     }
   }
@@ -2047,7 +2061,7 @@ export class ReportServiceService {
         limit: aggregated.length,
       };
     } catch (error) {
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to get Return To Cabinet Report data: ${errorMessage}`);
     }
   }
@@ -2107,7 +2121,7 @@ export class ReportServiceService {
       const buffer = await this.returnToCabinetReportExcelService.generateReport(reportData);
       return buffer;
     } catch (error) {
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to generate Return To Cabinet Report Excel: ${errorMessage}`);
     }
   }
@@ -2133,7 +2147,7 @@ export class ReportServiceService {
       const buffer = await this.returnToCabinetReportPdfService.generateReport(reportData);
       return buffer;
     } catch (error) {
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to generate Return To Cabinet Report PDF: ${errorMessage}`);
     }
   }
@@ -2279,7 +2293,7 @@ export class ReportServiceService {
       return { buffer, filename };
     } catch (error) {
       console.error('[Report Service] Error generating Dispensed Items Excel:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to generate Dispensed Items Excel report: ${errorMessage}`);
     }
   }
@@ -2346,7 +2360,7 @@ export class ReportServiceService {
       return { buffer, filename };
     } catch (error) {
       console.error('[Report Service] Error generating Dispensed Items PDF:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to generate Dispensed Items PDF report: ${errorMessage}`);
     }
   }
@@ -2493,7 +2507,7 @@ export class ReportServiceService {
       };
     } catch (error) {
       console.error('[Report Service] Error getting Cabinet Stock data:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to get Cabinet Stock report data: ${errorMessage}`);
     }
   }
@@ -2515,7 +2529,7 @@ export class ReportServiceService {
       return { buffer, filename };
     } catch (error) {
       console.error('[Report Service] Error generating Cabinet Stock Excel:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to generate Cabinet Stock Excel report: ${errorMessage}`);
     }
   }
@@ -2537,7 +2551,7 @@ export class ReportServiceService {
       return { buffer, filename };
     } catch (error) {
       console.error('[Report Service] Error generating Cabinet Stock PDF:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to generate Cabinet Stock PDF report: ${errorMessage}`);
     }
   }
@@ -2705,7 +2719,7 @@ export class ReportServiceService {
       return { buffer, filename };
     } catch (error) {
       console.error('[Report Service] Error generating Cabinet Departments Excel:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to generate Cabinet Departments Excel report: ${errorMessage}`);
     }
   }
@@ -2726,7 +2740,7 @@ export class ReportServiceService {
       return { buffer, filename };
     } catch (error) {
       console.error('[Report Service] Error generating Cabinet Departments PDF:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to generate Cabinet Departments PDF report: ${errorMessage}`);
     }
   }
@@ -2787,7 +2801,7 @@ export class ReportServiceService {
       return { buffer, filename };
     } catch (error) {
       console.error('[Report Service] Error generating Weighing Dispense Excel:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to generate Weighing Dispense Excel report: ${errorMessage}`);
     }
   }
@@ -2848,7 +2862,7 @@ export class ReportServiceService {
       return { buffer, filename };
     } catch (error) {
       console.error('[Report Service] Error generating Weighing Dispense PDF:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to generate Weighing Dispense PDF report: ${errorMessage}`);
     }
   }
@@ -2903,7 +2917,7 @@ export class ReportServiceService {
       return { buffer, filename };
     } catch (error) {
       console.error('[Report Service] Error generating Weighing Refill Excel:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to generate Weighing Refill Excel report: ${errorMessage}`);
     }
   }
@@ -2958,7 +2972,7 @@ export class ReportServiceService {
       return { buffer, filename };
     } catch (error) {
       console.error('[Report Service] Error generating Weighing Refill PDF:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to generate Weighing Refill PDF report: ${errorMessage}`);
     }
   }
@@ -3004,7 +3018,7 @@ export class ReportServiceService {
       return { buffer, filename };
     } catch (error) {
       console.error('[Report Service] Error generating Weighing Stock Excel:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to generate Weighing Stock Excel report: ${errorMessage}`);
     }
   }
@@ -3050,7 +3064,7 @@ export class ReportServiceService {
       return { buffer, filename };
     } catch (error) {
       console.error('[Report Service] Error generating Weighing Stock PDF:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to generate Weighing Stock PDF report: ${errorMessage}`);
     }
   }
@@ -3160,7 +3174,7 @@ export class ReportServiceService {
       };
     } catch (error) {
       console.error('[Report Service] Error getting Dispensed Items for Patients data:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to get Dispensed Items for Patients report data: ${errorMessage}`);
     }
   }
@@ -3187,7 +3201,7 @@ export class ReportServiceService {
       return { buffer, filename };
     } catch (error) {
       console.error('[Report Service] Error generating Dispensed Items for Patients Excel:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to generate Dispensed Items for Patients Excel report: ${errorMessage}`);
     }
   }
@@ -3214,7 +3228,7 @@ export class ReportServiceService {
       return { buffer, filename };
     } catch (error) {
       console.error('[Report Service] Error generating Dispensed Items for Patients PDF:', error);
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to generate Dispensed Items for Patients PDF report: ${errorMessage}`);
     }
   }
@@ -3313,8 +3327,8 @@ export class ReportServiceService {
         data: this.mapItemBorrowReportRows(aggregated),
         total: reportedTotal,
       };
-    } catch (error) {
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+    } catch (error: unknown) {
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to get Item Borrow Report data: ${errorMessage}`);
     }
   }
@@ -3370,7 +3384,7 @@ export class ReportServiceService {
       const reportData = await this.buildItemBorrowReportData(borrowData, params);
       return await this.itemBorrowReportExcelService.generateReport(reportData);
     } catch (error) {
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to generate Item Borrow Report Excel: ${errorMessage}`);
     }
   }
@@ -3388,8 +3402,154 @@ export class ReportServiceService {
       const reportData = await this.buildItemBorrowReportData(borrowData, params);
       return await this.itemBorrowReportPdfService.generateReport(reportData);
     } catch (error) {
-      const errorMessage = error?.message || error?.toString() || 'Unknown error';
+      const errorMessage = getCaughtErrorMessage(error);
       throw new Error(`Failed to generate Item Borrow Report PDF: ${errorMessage}`);
+    }
+  }
+
+  private async buildPrePrintStickerReportData(params: {
+    keyword?: string;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<PrePrintStickerReportData> {
+    const keyword = params.keyword?.trim();
+    const startDate = params.startDate?.trim();
+    const endDate = params.endDate?.trim();
+    const and: Prisma.PrePrintStickerWhereInput[] = [];
+
+    if (keyword) {
+      and.push({
+        OR: [
+          { doc_no: { contains: keyword } },
+          { remark: { contains: keyword } },
+          {
+            details: {
+              some: {
+                OR: [
+                  { itemcode: { contains: keyword } },
+                  { item_name: { contains: keyword } },
+                  { lot_no: { contains: keyword } },
+                ],
+              },
+            },
+          },
+        ],
+      });
+    }
+
+    if (startDate || endDate) {
+      const created_at: Prisma.DateTimeFilter = {};
+      if (startDate) created_at.gte = new Date(`${startDate}T00:00:00.000Z`);
+      if (endDate) created_at.lte = new Date(`${endDate}T23:59:59.999Z`);
+      and.push({ created_at });
+    }
+
+    const where: Prisma.PrePrintStickerWhereInput = and.length > 0 ? { AND: and } : {};
+
+    const docs = await this.prisma.prePrintSticker.findMany({
+      where,
+      orderBy: { created_at: 'desc' },
+      include: {
+        details: { orderBy: [{ item_name: 'asc' }, { line_order: 'asc' }] },
+        createdBy: {
+          select: { fname: true, lname: true, email: true },
+        },
+      },
+      take: 5000,
+    });
+
+    const rows: PrePrintStickerReportRow[] = [];
+    let totalSheets = 0;
+    for (const doc of docs) {
+      const createdByLabel = doc.createdBy
+        ? [doc.createdBy.fname, doc.createdBy.lname].filter(Boolean).join(' ').trim() ||
+          doc.createdBy.email ||
+          '—'
+        : '—';
+      if (doc.details.length === 0) {
+        rows.push({
+          doc_no: doc.doc_no,
+          status: doc.status,
+          created_at: doc.created_at,
+          created_by_label: createdByLabel,
+          itemcode: '—',
+          item_name: null,
+          expire_date: null,
+          copies: 0,
+          lot_no: null,
+        });
+        continue;
+      }
+      for (const d of doc.details) {
+        totalSheets += d.copies;
+        rows.push({
+          doc_no: doc.doc_no,
+          status: doc.status,
+          created_at: doc.created_at,
+          created_by_label: createdByLabel,
+          itemcode: d.itemcode,
+          item_name: d.item_name,
+          expire_date: d.expire_date,
+          copies: d.copies,
+          lot_no: d.lot_no,
+        });
+      }
+    }
+
+    rows.sort((a, b) => {
+      const nameA = (a.item_name ?? a.itemcode ?? '').localeCompare(b.item_name ?? b.itemcode ?? '', 'th');
+      if (nameA !== 0) return nameA;
+      return a.doc_no.localeCompare(b.doc_no, 'th');
+    });
+
+    return {
+      filters: {
+        keyword: params.keyword,
+        startDate: params.startDate,
+        endDate: params.endDate,
+      },
+      summary: {
+        total_documents: docs.length,
+        total_lots: rows.filter((r) => r.itemcode !== '—').length,
+        total_sheets: totalSheets,
+      },
+      data: rows,
+    };
+  }
+
+  async generatePrePrintStickerReportExcel(params: {
+    keyword?: string;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<{ buffer: Buffer; filename: string }> {
+    try {
+      const reportData = await this.buildPrePrintStickerReportData(params);
+      const buffer = await this.prePrintStickerReportExcelService.generateReport(reportData);
+      const dateStr = params.startDate
+        ? params.startDate.replace(/\//g, '-')
+        : new Date().toISOString().split('T')[0];
+      return { buffer, filename: `pre_print_sticker_report_${dateStr}.xlsx` };
+    } catch (error) {
+      const errorMessage = getCaughtErrorMessage(error);
+      throw new Error(`Failed to generate Pre-print Sticker Excel report: ${errorMessage}`);
+    }
+  }
+
+  async generatePrePrintStickerReportPdf(params: {
+    keyword?: string;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<{ buffer: Buffer; filename: string }> {
+    try {
+      const reportData = await this.buildPrePrintStickerReportData(params);
+      const buffer = await this.prePrintStickerReportPdfService.generateReport(reportData);
+      const dateStr = params.startDate
+        ? params.startDate.replace(/\//g, '-')
+        : new Date().toISOString().split('T')[0];
+      return { buffer, filename: `pre_print_sticker_report_${dateStr}.pdf` };
+    } catch (error) {
+      const errorMessage = getCaughtErrorMessage(error);
+      throw new Error(`Failed to generate Pre-print Sticker PDF report: ${errorMessage}`);
     }
   }
 }

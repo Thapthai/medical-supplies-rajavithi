@@ -6,6 +6,7 @@ import { CreateItemDto } from './dto/create-item.dto';
 import { UpdateItemDto } from './dto/update-item.dto';
 import { UpdateItemMinMaxDto } from './dto/update-item-minmax.dto';
 import { ItemStockDto } from './dto/item-stock.dto';
+import { extractItemBrand } from './utils/extract-item-brand';
 import { log } from 'console';
 
 /** ค่า DB สำหรับพิมพ์สติ๊กเกอร์์ / legacy — ใส่เมื่อสร้าง Item ใหม่ถ้าไม่ส่งมาจาก client */
@@ -2576,6 +2577,58 @@ export class ItemService {
         success: false,
         message: 'ลบ itemstock ไม่สำเร็จ',
         error: (error as Error)?.message ?? String(error),
+      };
+    }
+  }
+
+  /**
+   * ดึงรายการยี่ห้อจาก itemname (ข้อความก่อน " + ") ไม่ซ้ำ เรียงตามชื่อ
+   */
+  async getItemBrandGroups(keyword?: string) {
+    try {
+      const kw = keyword?.trim();
+      const andParts: Prisma.ItemWhereInput[] = [
+        { itemname: { not: null } },
+        { NOT: { itemname: '' } },
+      ];
+
+      if (kw) {
+        andParts.push({
+          OR: [
+            { itemname: { contains: kw } },
+            { itemcode: { contains: kw } },
+          ],
+        });
+      }
+
+      const items = await this.prisma.item.findMany({
+        where: { AND: andParts },
+        select: { itemname: true },
+      });
+
+      const brandSet = new Set<string>();
+      for (const item of items) {
+        const itemname = String(item.itemname ?? '').trim();
+        if (!itemname) continue;
+        brandSet.add(extractItemBrand(itemname));
+      }
+
+      const data = [...brandSet].sort((a, b) =>
+        a.localeCompare(b, 'th', { sensitivity: 'base' }),
+      );
+
+      return {
+        success: true,
+        data,
+        total: data.length,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: 'Failed to fetch item brands',
+        error: (error as Error)?.message ?? String(error),
+        data: [],
+        total: 0,
       };
     }
   }

@@ -121,6 +121,12 @@ export const staffMenuItems = [
                 icon: FileBarChart,
             },
             {
+                name: 'เตรียมพิมพ์สติ๊กเกอร์',
+                href: '/staff/pre-print-sticker',
+                description: 'เลือกยี่ห้อ → เตรียมพิมพ์สติ๊กเกอร์',
+                icon: Printer,
+            },
+            {
                 name: 'บันทึกใช้อุปกรณ์กับคนไข้',
                 href: '/staff/medical-supplies',
                 description: 'ประวัติการเบิกจากตู้ SmartCabinet — Division เริ่มที่ทั้งหมด แคบลงได้',

@@ -47,29 +47,30 @@ model User {
   employee                    Employee?                    @relation(fields: [emp_code], references: [EmpCode])
   staffPermissionDepartments  StaffPermissionDepartment[]
   departmentDispenseDocuments DepartmentDispenseDocument[]
+  prePrintStickers            PrePrintSticker[]
 
   @@map("app_users")
 }
 
 model StaffRole {
-  id                     Int      @id @default(autoincrement())
-  code                   String   @unique // e.g. IT-001, WH-001, it2, warehouse2
-  name                   String // 'IT 1', 'IT 2', 'Warehouse 1', etc.
-  description            String?  @db.Text // Description of the role
-  is_active              Boolean  @default(true) @map("is_active")
+  id                    Int      @id @default(autoincrement())
+  code                  String   @unique // e.g. IT-001, WH-001, it2, warehouse2
+  name                  String // 'IT 1', 'IT 2', 'Warehouse 1', etc.
+  description           String?  @db.Text // Description of the role
+  is_active             Boolean  @default(true) @map("is_active")
   /// Division หลักที่เป็นค่าเริ่มต้นของฟิลเตอร์ (เช่น หน้า Staff Items)
-  default_department_id  Int?     @map("default_department_id")
+  default_department_id Int?     @map("default_department_id")
   /// ตู้ Cabinet เริ่มต้นของฟิลเตอร์ (ควรผูก ACTIVE กับ default_department)
-  default_cabinet_id     Int?     @map("default_cabinet_id")
-  created_at             DateTime @default(dbgenerated("NOW()")) @map("created_at")
-  updated_at             DateTime @updatedAt @map("updated_at")
+  default_cabinet_id    Int?     @map("default_cabinet_id")
+  created_at            DateTime @default(dbgenerated("NOW()")) @map("created_at")
+  updated_at            DateTime @updatedAt @map("updated_at")
 
   // Relations
-  rolePermissions     StaffRolePermission[]
-  defaultDepartment   Department?           @relation("StaffRoleDefaultDepartment", fields: [default_department_id], references: [ID], onDelete: SetNull)
-  defaultCabinet      cabinet?              @relation("StaffRoleDefaultCabinet", fields: [default_cabinet_id], references: [id], onDelete: SetNull)
+  rolePermissions   StaffRolePermission[]
+  defaultDepartment Department?           @relation("StaffRoleDefaultDepartment", fields: [default_department_id], references: [ID], onDelete: SetNull)
+  defaultCabinet    cabinet?              @relation("StaffRoleDefaultCabinet", fields: [default_cabinet_id], references: [id], onDelete: SetNull)
   /// ว่าง = role นี้เห็นข้อมูลทุกแผนกหลัก; มีแถว = เห็นเฉพาะแผนกหลักที่ระบุ (หลายแถวได้)
-  users               User[]
+  users             User[]
 
   @@index([code], name: "idx_code")
   @@index([is_active], name: "idx_is_active")
@@ -338,6 +339,7 @@ model Item {
   itemDepartments                 ItemDepartments[]
   departmentDispenseDocumentLines DepartmentDispenseDocumentLine[]
   itemStorageLocations            ItemStorageLocation[]
+  prePrintStickerDetails          PrePrintStickerDetail[]
 
   @@index([itemtypeID])
   @@index([SubUnitID], map: "idx_item_sub_unit_id")
@@ -925,6 +927,48 @@ model DepartmentDispenseDocumentLine {
   @@index([document_id])
   @@index([itemcode])
   @@map("app_department_dispense_document_lines")
+}
+
+/// เอกสารเตรียมพิมพ์สติ๊กเกอร์ (หัวเอกสาร)
+model PrePrintSticker {
+  id                 Int      @id @default(autoincrement())
+  doc_no             String   @unique @map("doc_no") @db.VarChar(32)
+  status             String   @default("PREPARED") @map("status") @db.VarChar(20)
+  remark             String?  @map("remark") @db.Text
+  total_lines        Int      @default(0) @map("total_lines")
+  total_sheets       Int      @default(0) @map("total_sheets")
+  created_by_user_id Int?     @map("created_by_user_id")
+  created_at         DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updated_at         DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+
+  createdBy User?                   @relation(fields: [created_by_user_id], references: [id], onDelete: SetNull)
+  details   PrePrintStickerDetail[]
+
+  @@index([created_at(sort: Desc)])
+  @@index([status])
+  @@map("app_pre_print_stickers")
+}
+
+/// รายการในเอกสารเตรียมพิมพ์สติ๊กเกอร์
+model PrePrintStickerDetail {
+  id                   Int       @id @default(autoincrement())
+  pre_print_sticker_id Int       @map("pre_print_sticker_id")
+  line_order           Int       @default(0) @map("line_order")
+  itemcode             String    @map("itemcode") @db.VarChar(25)
+  item_name            String?   @map("item_name") @db.VarChar(255)
+  expire_date          DateTime? @map("expire_date") @db.Date
+  copies               Int       @default(1) @map("copies")
+  is_main              Boolean   @default(false) @map("is_main")
+  lot_no               String?   @map("lot_no") @db.VarChar(50)
+  created_at           DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  updated_at           DateTime  @updatedAt @map("updated_at") @db.DateTime(3)
+
+  document PrePrintSticker @relation(fields: [pre_print_sticker_id], references: [id], onDelete: Cascade)
+  item     Item?           @relation(fields: [itemcode], references: [itemcode], onDelete: Restrict)
+
+  @@index([pre_print_sticker_id])
+  @@index([itemcode])
+  @@map("app_pre_print_sticker_details")
 }
 
 /// หน่วยนับ (เช่น ชิ้น, กล่อง) — ตาราง `unit`

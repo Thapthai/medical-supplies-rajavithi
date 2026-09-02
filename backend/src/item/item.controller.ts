@@ -156,6 +156,12 @@ export class ItemController {
     );
   }
 
+  /** ดึงรายการยี่ห้อจาก itemname (ก่อน " + ") ไม่ซ้ำ */
+  @Get('brands')
+  async getBrandGroups(@Query('keyword') keyword?: string) {
+    return this.itemService.getItemBrandGroups(keyword);
+  }
+
   /** รายการจาก slot ในตู้ (+ จำนวนในตู้ / max / ต้องเติม) — ใช้เลือกพิมพ์สติ๊กเกอร์์ */
   @Get('cabinet-slot-items')
   async findCabinetSlotItems(
