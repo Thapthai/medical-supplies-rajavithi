@@ -266,8 +266,7 @@ export function usePrePrintSticker() {
   const handleBrandChange = (brand: string) => {
     setSelectedBrand(brand);
     setKeywordInput('');
-    setSelectedLines([]);
-    setCheckedItemcodes(new Set());
+    // เก็บ checkbox / draft / lot ที่กรอกไว้ — สลับยี่ห้อแค่กรองรายการ ไม่ล้างงานที่ค้าง
   };
 
   const toggleCheck = (row: Item) => {

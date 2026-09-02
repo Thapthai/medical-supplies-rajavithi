@@ -33,7 +33,9 @@ import PrePrintHistoryFilterCard, {
 } from './PrePrintHistoryFilterCard';
 
 const ITEMS_PER_PAGE = 10;
-const COLUMN_COUNT = 8;
+/** ซ่อนปุ่ม PDF รายแถวชั่วคราว — เปิดอีกครั้งเมื่อพร้อม */
+const SHOW_ROW_PDF = false;
+const COLUMN_COUNT = SHOW_ROW_PDF ? 8 : 7;
 
 function getTodayDate(): string {
   const today = new Date();
@@ -442,7 +444,7 @@ export default function PrePrintHistoryTab({ refreshKey = 0 }: PrePrintHistoryTa
               <span className="hidden sm:inline">{descriptionText}</span>
             </CardDescription>
           </div>
-          <div className="flex shrink-0 gap-2">
+          {/* <div className="flex shrink-0 gap-2">
             <Button
               type="button"
               variant="outline"
@@ -471,18 +473,8 @@ export default function PrePrintHistoryTab({ refreshKey = 0 }: PrePrintHistoryTa
               )}
               <span className="hidden sm:inline">PDF</span>
             </Button>
-            {/* <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="shrink-0"
-              disabled={loading || exportLoading !== null}
-              onClick={() => void loadHistory()}
-            >
-              <RefreshCw className={cn('h-4 w-4 sm:mr-2', loading && 'animate-spin')} />
-              <span className="hidden sm:inline">รีเฟรช</span>
-            </Button> */}
-          </div>
+     
+          </div> */}
         </CardHeader>
 
         <CardContent className="px-3 py-3 sm:px-4 sm:py-4">
@@ -551,21 +543,23 @@ export default function PrePrintHistoryTab({ refreshKey = 0 }: PrePrintHistoryTa
                             </div>
                           </div>
                         </button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon"
-                          className="mt-0.5 h-8 w-8 shrink-0"
-                          title={`ดาวน์โหลด PDF ${doc.doc_no}`}
-                          disabled={rowPdfLoadingId !== null}
-                          onClick={(e) => void handleDownloadRowPdf(doc, e)}
-                        >
-                          {rowPdfLoadingId === doc.id ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <FileDown className="h-3.5 w-3.5" />
-                          )}
-                        </Button>
+                        {SHOW_ROW_PDF && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="mt-0.5 h-8 w-8 shrink-0"
+                            title={`ดาวน์โหลด PDF ${doc.doc_no}`}
+                            disabled={rowPdfLoadingId !== null}
+                            onClick={(e) => void handleDownloadRowPdf(doc, e)}
+                          >
+                            {rowPdfLoadingId === doc.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <FileDown className="h-3.5 w-3.5" />
+                            )}
+                          </Button>
+                        )}
                       </div>
                       {isExpanded && (
                         <div className="border-t bg-gray-50 px-3 py-3">
@@ -589,7 +583,9 @@ export default function PrePrintHistoryTab({ refreshKey = 0 }: PrePrintHistoryTa
                       <TableHead className="text-center min-w-[6rem]">Lot</TableHead>
                       <TableHead className="text-center min-w-[6rem]">แผ่น</TableHead>
                       <TableHead>ผู้บันทึก</TableHead>
-                      <TableHead className="w-[88px] text-center">PDF</TableHead>
+                      {SHOW_ROW_PDF && (
+                        <TableHead className="w-[88px] text-center">PDF</TableHead>
+                      )}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -639,23 +635,25 @@ export default function PrePrintHistoryTab({ refreshKey = 0 }: PrePrintHistoryTa
                             <TableCell className="text-muted-foreground">
                               {creatorLabel(doc)}
                             </TableCell>
-                            <TableCell className="text-center">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="icon"
-                                className="h-8 w-8"
-                                title={`ดาวน์โหลด PDF ${doc.doc_no}`}
-                                disabled={rowPdfLoadingId !== null}
-                                onClick={(e) => void handleDownloadRowPdf(doc, e)}
-                              >
-                                {rowPdfLoadingId === doc.id ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <FileDown className="h-4 w-4" />
-                                )}
-                              </Button>
-                            </TableCell>
+                            {SHOW_ROW_PDF && (
+                              <TableCell className="text-center">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  title={`ดาวน์โหลด PDF ${doc.doc_no}`}
+                                  disabled={rowPdfLoadingId !== null}
+                                  onClick={(e) => void handleDownloadRowPdf(doc, e)}
+                                >
+                                  {rowPdfLoadingId === doc.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <FileDown className="h-4 w-4" />
+                                  )}
+                                </Button>
+                              </TableCell>
+                            )}
                           </TableRow>
 
                           {isExpanded && (
