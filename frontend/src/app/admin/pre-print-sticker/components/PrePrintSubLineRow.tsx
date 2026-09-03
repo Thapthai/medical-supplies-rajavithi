@@ -5,15 +5,18 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { DatePickerBE } from '@/components/ui/date-picker-be';
 import { TableCell, TableRow } from '@/components/ui/table';
+import { cn } from '@/lib/utils';
 import type { SelectedLine } from '../types';
+import { parseCopiesInput } from '../utils';
 
 type PrePrintSubLineRowProps = {
   line: SelectedLine;
   idPrefix: string;
-  /** catalog = มีคอลัมน์ checkbox ว่าง (ตารางซ้าย), prepared = 4 คอลัมน์ (ตารางขวา) */
+  /** prepared = 4 คอลัมน์ (ตารางขวา) */
   layout?: 'catalog' | 'prepared';
   /** stack = การ์ดมือถือ จัดช่องให้ตรงแถว lot ด้านบน */
   variant?: 'table' | 'stack';
+  expireError?: boolean;
   onSetCopies: (lineId: string, raw: number | '') => void;
   onExpireDateChange: (lineId: string, ymd: string) => void;
   onRemoveLine: (lineId: string) => void;
@@ -24,6 +27,7 @@ export default function PrePrintSubLineRow({
   idPrefix,
   layout = 'catalog',
   variant = 'table',
+  expireError = false,
   onSetCopies,
   onExpireDateChange,
   onRemoveLine,
@@ -31,7 +35,12 @@ export default function PrePrintSubLineRow({
   const inputDisabled = line.refillCap <= 0;
 
   const expirePicker = (
-    <div className="flex min-w-0 items-center [&_input]:h-8 [&_button]:h-8 [&_button]:w-8">
+    <div
+      className={cn(
+        'flex min-w-0 items-center rounded-md p-0.5 [&_input]:h-8 [&_button]:h-8 [&_button]:w-8',
+        expireError && 'ring-2 ring-red-500 bg-red-50/80 [&_input]:border-red-500 [&_button]:border-red-500',
+      )}
+    >
       <DatePickerBE
         id={`${idPrefix}-expire-${line.lineId}`}
         className="items-center"
@@ -48,17 +57,9 @@ export default function PrePrintSubLineRow({
       type="text"
       inputMode="numeric"
       className="h-8 w-full bg-white text-center font-mono text-sm"
-      value={line.refillCap <= 0 ? 0 : line.copies === '' ? '' : line.copies}
+      value={line.refillCap <= 0 ? '' : line.copies === '' ? '' : line.copies}
       disabled={inputDisabled}
-      onChange={(e) => {
-        const v = e.target.value.trim();
-        if (v === '') {
-          onSetCopies(line.lineId, '');
-          return;
-        }
-        const n = parseInt(v, 10);
-        if (Number.isFinite(n)) onSetCopies(line.lineId, n);
-      }}
+      onChange={(e) => onSetCopies(line.lineId, parseCopiesInput(e.target.value))}
     />
   );
 
@@ -77,7 +78,12 @@ export default function PrePrintSubLineRow({
 
   if (variant === 'stack') {
     return (
-      <div className="flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-slate-50/70 p-2.5">
+      <div
+        className={cn(
+          'flex flex-wrap items-end gap-2 rounded-lg border bg-slate-50/70 p-2.5',
+          expireError ? 'border-red-400 ring-1 ring-red-400' : 'border-slate-200',
+        )}
+      >
         <div className="min-w-0 grow basis-[9rem]">{expirePicker}</div>
         <div className="w-[4.5rem] shrink-0">{qtyInput}</div>
         {removeBtn}
@@ -104,10 +110,14 @@ export default function PrePrintSubLineRow({
   );
 
   return (
-    <TableRow className="bg-slate-50/80 hover:bg-slate-50/80">
+    <TableRow
+      className={cn(
+        'hover:bg-slate-50/80',
+        expireError ? 'bg-red-50/70' : 'bg-slate-50/80',
+      )}
+    >
       {layout === 'catalog' ? (
         <>
-          <TableCell className="w-12" />
           {nameCell}
           {expireCell}
           {qtyCell}

@@ -14,6 +14,19 @@ export function resolveCopies(raw: number | '', maxCap: number): number {
   return clampCopies(raw, maxCap);
 }
 
+/** parse ช่องจำนวน — ว่างได้ / ไม่รับ 0 หรือค่าติดลบ */
+export function parseCopiesInput(raw: string): number | '' {
+  const v = raw.trim();
+  if (v === '') return '';
+  const n = parseInt(v, 10);
+  if (!Number.isFinite(n) || n <= 0) return '';
+  return n;
+}
+
+export function hasExpireDate(ymd: string | null | undefined): boolean {
+  return (ymd ?? '').trim().length > 0;
+}
+
 /** เพดานจำนวนแผ่นต่อรายการ — หน้าเตรียมพิมพ์ใช้เพดานรวมของระบบ */
 export function maxCopiesPerItem(): number {
   return MAX_TOTAL_LABELS;

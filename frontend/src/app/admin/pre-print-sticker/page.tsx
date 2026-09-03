@@ -7,6 +7,7 @@ import AppLayout from '@/components/AppLayout';
 import PrePrintHistoryTab from './components/PrePrintHistoryTab';
 import PrePrintItemListCard from './components/PrePrintItemListCard';
 import PrePrintOrderCard from './components/PrePrintOrderCard';
+import CreatePrePrintItemDialog from './components/CreatePrePrintItemDialog';
 import PrePrintStickerTabs, { type PrePrintStickerTab } from './components/PrePrintStickerTabs';
 import { usePrePrintSticker } from './usePrePrintSticker';
 
@@ -14,6 +15,7 @@ export default function PrePrintStickerPage() {
   const s = usePrePrintSticker();
   const [activeTab, setActiveTab] = useState<PrePrintStickerTab>('record');
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+  const [createItemOpen, setCreateItemOpen] = useState(false);
 
   const handleSaveDocument = async () => {
     const ok = await s.handleSaveDocument();
@@ -45,8 +47,6 @@ export default function PrePrintStickerPage() {
           keywordInput={s.keywordInput}
           onKeywordInputChange={s.setKeywordInput}
           onPageChange={s.handlePageChange}
-          checkedItemcodes={s.checkedItemcodes}
-          onToggleCheck={s.toggleCheck}
           getItemDraft={s.getItemDraft}
           onDraftExpireChange={s.setItemDraftExpire}
           onDraftCopiesChange={s.setItemDraftCopies}
@@ -59,6 +59,7 @@ export default function PrePrintStickerPage() {
           stagedSummary={s.stagedSummary}
           canPrepare={s.canPrepare}
           onPrepare={s.handlePrepare}
+          onCreateItemClick={() => setCreateItemOpen(true)}
         />
 
         <PrePrintOrderCard
@@ -86,7 +87,7 @@ export default function PrePrintStickerPage() {
                 เตรียมพิมพ์สติ๊กเกอร์
               </h1>
               <p className="mt-1 text-xs text-gray-500 sm:text-sm">
-                เลือกยี่ห้อ → เช็ค → กรอก lot (หมดอายุ/จำนวน) → (+) เพิ่ม lot → เตรียมพิม → บันทึกเอกสาร
+                เลือกยี่ห้อ → กรอกจำนวน/วันหมดอายุ → (+) เพิ่ม lot → เตรียมพิม → บันทึกเอกสาร
               </p>
             </div>
           </div>
@@ -98,6 +99,13 @@ export default function PrePrintStickerPage() {
             historyContent={<PrePrintHistoryTab refreshKey={historyRefreshKey} />}
           />
         </div>
+
+        <CreatePrePrintItemDialog
+          open={createItemOpen}
+          onOpenChange={setCreateItemOpen}
+          brands={s.brands}
+          onSuccess={() => void s.reloadAll()}
+        />
       </AppLayout>
     </ProtectedRoute>
   );

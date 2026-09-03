@@ -1,12 +1,14 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
   Param,
   ParseIntPipe,
   Post,
+  Put,
   Query,
   Req,
   UseGuards,
@@ -14,6 +16,7 @@ import {
 import { Request } from 'express';
 import { AuthContext, AuthGuard } from '../auth/guards/auth.guard';
 import { CreatePrePrintStickerDto } from './dto/create-pre-print-sticker.dto';
+import { UpdatePrePrintStickerDto } from './dto/update-pre-print-sticker.dto';
 import { PrintLabelItemDto } from './dto/print-label-item.dto';
 import { PrintLabelItemsDto } from './dto/print-label-items.dto';
 import { StickerPrintService } from './sticker-print.service';
@@ -74,6 +77,23 @@ export class StickerPrintController {
   @Get('pre-print-stickers/:id')
   getPrePrintSticker(@Param('id', ParseIntPipe) id: number) {
     return this.stickerPrintService.getPrePrintSticker(id);
+  }
+
+  /** อัปเดตเอกสารเตรียมพิมพ์สติ๊กเกอร์ */
+  @Put('pre-print-stickers/:id')
+  @HttpCode(HttpStatus.OK)
+  updatePrePrintSticker(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: UpdatePrePrintStickerDto,
+  ) {
+    return this.stickerPrintService.updatePrePrintSticker(id, body);
+  }
+
+  /** ลบเอกสารเตรียมพิมพ์สติ๊กเกอร์ */
+  @Delete('pre-print-stickers/:id')
+  @HttpCode(HttpStatus.OK)
+  deletePrePrintSticker(@Param('id', ParseIntPipe) id: number) {
+    return this.stickerPrintService.deletePrePrintSticker(id);
   }
 
   /** บันทึกเอกสารเตรียมพิมพ์สติ๊กเกอร์ */

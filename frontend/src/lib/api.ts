@@ -32,9 +32,10 @@ function staffPortalApiPath(url: string | undefined): boolean {
   if (url.startsWith('/staff-users')) return false;
   if (url.startsWith('/sticker-print')) return true;
   if (url.startsWith('/department-dispense')) return true;
-  // Pre-print sticker (staff) — โหลดยี่ห้อ/รายการ + ส่งออกรายงาน
-  if (url.startsWith('/items/brands') || url.startsWith('/items/master')) return true;
+  // Pre-print sticker / item master (staff)
+  if (url === '/items' || url.startsWith('/items/')) return true;
   if (url.startsWith('/reports/pre-print-stickers')) return true;
+  if (url.startsWith('/departments')) return true;
   return url.startsWith('/staff/') || url === '/staff';
 }
 
@@ -240,6 +241,29 @@ export const itemsApi = {
     message?: string;
   }> => {
     const response = await api.get('/items/brands', {
+      params: keyword?.trim() ? { keyword: keyword.trim() } : undefined,
+    });
+    return response.data;
+  },
+
+  /** รหัสระบบถัดไปรูปแบบ UI00001 */
+  getNextUiCode: async (): Promise<{
+    success: boolean;
+    data?: { itemcode: string; next: number } | null;
+    message?: string;
+  }> => {
+    const response = await api.get('/items/next-ui-code');
+    return response.data;
+  },
+
+  /** รายการประเภทอุปกรณ์ (itemtype) */
+  getItemTypes: async (keyword?: string): Promise<{
+    success: boolean;
+    data: Array<{ id: number; name: string }>;
+    total: number;
+    message?: string;
+  }> => {
+    const response = await api.get('/items/item-types', {
       params: keyword?.trim() ? { keyword: keyword.trim() } : undefined,
     });
     return response.data;
@@ -2486,6 +2510,39 @@ export const stickerPrintApi = {
     message?: string;
   }> => {
     const response = await api.get(`/sticker-print/pre-print-stickers/${id}`);
+    return response.data;
+  },
+
+  updatePrePrintSticker: async (
+    id: number,
+    body: {
+      remark?: string;
+      lines: Array<{
+        itemcode: string;
+        item_name?: string;
+        expire_date?: string;
+        copies: number;
+        is_main?: boolean;
+        lot_no?: string;
+      }>;
+    },
+  ): Promise<{
+    success: boolean;
+    data?: PrePrintStickerDocument;
+    message?: string;
+  }> => {
+    const response = await api.put(`/sticker-print/pre-print-stickers/${id}`, body);
+    return response.data;
+  },
+
+  deletePrePrintSticker: async (
+    id: number,
+  ): Promise<{
+    success: boolean;
+    message?: string;
+    data?: { id: number; doc_no: string };
+  }> => {
+    const response = await api.delete(`/sticker-print/pre-print-stickers/${id}`);
     return response.data;
   },
 

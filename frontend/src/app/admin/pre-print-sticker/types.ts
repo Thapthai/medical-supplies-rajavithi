@@ -25,4 +25,4 @@ export type PreparedStockRow = {
   RfidCode?: string | null;
 };
 
-export const DEFAULT_ITEM_DRAFT: ItemDraft = { expireDate: '', copies: 1 };
+export const DEFAULT_ITEM_DRAFT: ItemDraft = { expireDate: '', copies: '' };

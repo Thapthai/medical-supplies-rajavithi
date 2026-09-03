@@ -10,6 +10,7 @@ import * as net from 'node:net';
 import * as path from 'node:path';
 import { PrismaService } from '../prisma/prisma.service';
 import type { CreatePrePrintStickerDto } from './dto/create-pre-print-sticker.dto';
+import type { UpdatePrePrintStickerDto } from './dto/update-pre-print-sticker.dto';
 import type { PrintLabelItemDto } from './dto/print-label-item.dto';
 import type { PrintLabelItemsDto } from './dto/print-label-items.dto';
 import type { PrintSatoSbplDto } from './dto/print-sato-sbpl.dto';
@@ -48,10 +49,8 @@ export class StickerPrintService {
     return Number.isNaN(d.getTime()) ? null : d;
   }
 
-  /** บันทึกเอกสารเตรียมพิมพ์สติ๊กเกอร์ (หัวเอกสาร + รายการ) */
-  async createPrePrintSticker(dto: CreatePrePrintStickerDto, userId?: number) {
-    const lines = dto.lines ?? [];
-    if (lines.length === 0) {
+  private async resolvePrePrintLines(lines: CreatePrePrintStickerDto['lines']) {
+    if (!lines?.length) {
       throw new BadRequestException('กรุณาระบุรายการอย่างน้อย 1 แถว');
     }
 
@@ -74,6 +73,12 @@ export class StickerPrintService {
       throw new BadRequestException(`จำนวนฉลากรวมเกิน 2000 (ตอนนี้รวม ${totalSheets} แผ่น)`);
     }
 
+    return { lines, nameByCode, totalSheets };
+  }
+
+  /** บันทึกเอกสารเตรียมพิมพ์สติ๊กเกอร์ (หัวเอกสาร + รายการ) */
+  async createPrePrintSticker(dto: CreatePrePrintStickerDto, userId?: number) {
+    const { lines, nameByCode, totalSheets } = await this.resolvePrePrintLines(dto.lines ?? []);
     const docNo = await this.generatePrePrintDocNo();
 
     const created = await this.prisma.prePrintSticker.create({
@@ -105,6 +110,64 @@ export class StickerPrintService {
     });
 
     return { success: true, data: created };
+  }
+
+  /** อัปเดตเอกสารเตรียมพิมพ์ — แทนที่รายการทั้งหมด */
+  async updatePrePrintSticker(id: number, dto: UpdatePrePrintStickerDto) {
+    const existing = await this.prisma.prePrintSticker.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!existing) throw new NotFoundException('ไม่พบเอกสาร');
+
+    const { lines, nameByCode, totalSheets } = await this.resolvePrePrintLines(dto.lines ?? []);
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.prePrintStickerDetail.deleteMany({ where: { pre_print_sticker_id: id } });
+      return tx.prePrintSticker.update({
+        where: { id },
+        data: {
+          remark: dto.remark?.trim() || null,
+          total_lines: lines.length,
+          total_sheets: totalSheets,
+          details: {
+            create: lines.map((line, idx) => ({
+              line_order: idx,
+              itemcode: line.itemcode.trim(),
+              item_name: line.item_name?.trim() || nameByCode.get(line.itemcode.trim()) || null,
+              expire_date: this.parseExpireDateYmd(line.expire_date),
+              copies: line.copies,
+              is_main: false,
+              lot_no: line.lot_no?.trim().slice(0, 50) || null,
+            })),
+          },
+        },
+        include: {
+          details: { orderBy: [{ item_name: 'asc' }, { line_order: 'asc' }] },
+          createdBy: {
+            select: { id: true, fname: true, lname: true, email: true },
+          },
+        },
+      });
+    });
+
+    return { success: true, data: updated, message: 'อัปเดตเอกสารสำเร็จ' };
+  }
+
+  /** ลบเอกสารเตรียมพิมพ์ (รายการย่อย cascade) */
+  async deletePrePrintSticker(id: number) {
+    const existing = await this.prisma.prePrintSticker.findUnique({
+      where: { id },
+      select: { id: true, doc_no: true },
+    });
+    if (!existing) throw new NotFoundException('ไม่พบเอกสาร');
+
+    await this.prisma.prePrintSticker.delete({ where: { id } });
+    return {
+      success: true,
+      message: `ลบเอกสาร ${existing.doc_no} สำเร็จ`,
+      data: { id: existing.id, doc_no: existing.doc_no },
+    };
   }
 
   async listPrePrintStickers(params: {

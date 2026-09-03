@@ -6,7 +6,6 @@ import type { Item } from '@/types/item';
 import ItemNameWithUnit from '@/components/ItemNameWithUnit';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { DatePickerBE } from '@/components/ui/date-picker-be';
 import {
@@ -18,7 +17,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
-import { generatePageNumbers } from '../utils';
+import { generatePageNumbers, hasExpireDate, parseCopiesInput } from '../utils';
 import type { ItemDraft, SelectedLine } from '../types';
 import { DEFAULT_ITEM_DRAFT } from '../types';
 import PrePrintSubLineRow from './PrePrintSubLineRow';
@@ -36,8 +35,6 @@ type PrePrintItemListCardProps = {
   keywordInput: string;
   onKeywordInputChange: (value: string) => void;
   onPageChange: (nextPage: number) => void;
-  checkedItemcodes: Set<string>;
-  onToggleCheck: (row: Item) => void;
   getItemDraft: (itemcode: string) => ItemDraft;
   onDraftExpireChange: (itemcode: string, ymd: string) => void;
   onDraftCopiesChange: (itemcode: string, raw: number | '') => void;
@@ -50,7 +47,13 @@ type PrePrintItemListCardProps = {
   stagedSummary: { rows: number; sheets: number };
   canPrepare: boolean;
   onPrepare: () => void;
+  onCreateItemClick?: () => void;
 };
+
+function needsExpireWarning(copies: number | '', expireDate: string): boolean {
+  if (copies === '') return false;
+  return !hasExpireDate(expireDate);
+}
 
 function DraftControls({
   row,
@@ -58,6 +61,7 @@ function DraftControls({
   onDraftExpireChange,
   onDraftCopiesChange,
   onAddSubLine,
+  expireError,
   compact,
 }: {
   row: Item;
@@ -65,23 +69,33 @@ function DraftControls({
   onDraftExpireChange: (itemcode: string, ymd: string) => void;
   onDraftCopiesChange: (itemcode: string, raw: number | '') => void;
   onAddSubLine: (row: Item) => void;
+  expireError: boolean;
   compact?: boolean;
 }) {
   return (
     <div
       className={cn(
-        'flex flex-wrap items-end gap-2',
+        'flex flex-wrap items-end gap-2 rounded-md p-1.5 -m-1.5 transition-colors',
+        expireError && 'ring-2 ring-red-500 bg-red-50/60',
         compact ? 'w-full' : '',
       )}
     >
       <div className={cn('min-w-0', compact ? 'grow basis-[9rem]' : 'min-w-[8.5rem]')}>
         <label
           htmlFor={`draft-expire-${row.itemcode}`}
-          className="mb-1 block text-[11px] font-medium text-muted-foreground md:hidden"
+          className={cn(
+            'mb-1 block text-[11px] font-medium md:hidden',
+            expireError ? 'text-red-600' : 'text-muted-foreground',
+          )}
         >
           วันหมดอายุ
         </label>
-        <div className="flex items-center [&_input]:h-8 [&_button]:h-8 [&_button]:w-8">
+        <div
+          className={cn(
+            'flex items-center rounded-md [&_input]:h-8 [&_button]:h-8 [&_button]:w-8',
+            expireError && '[&_input]:border-red-500 [&_button]:border-red-500',
+          )}
+        >
           <DatePickerBE
             id={`draft-expire-${row.itemcode}`}
             className="items-center"
@@ -105,15 +119,7 @@ function DraftControls({
           inputMode="numeric"
           className="h-8 w-full bg-white text-center font-mono text-sm"
           value={draft.copies === '' ? '' : draft.copies}
-          onChange={(e) => {
-            const v = e.target.value.trim();
-            if (v === '') {
-              onDraftCopiesChange(row.itemcode, '');
-              return;
-            }
-            const n = parseInt(v, 10);
-            if (Number.isFinite(n)) onDraftCopiesChange(row.itemcode, n);
-          }}
+          onChange={(e) => onDraftCopiesChange(row.itemcode, parseCopiesInput(e.target.value))}
         />
       </div>
       <Button
@@ -142,8 +148,6 @@ export default function PrePrintItemListCard({
   keywordInput,
   onKeywordInputChange,
   onPageChange,
-  checkedItemcodes,
-  onToggleCheck,
   getItemDraft,
   onDraftExpireChange,
   onDraftCopiesChange,
@@ -156,6 +160,7 @@ export default function PrePrintItemListCard({
   stagedSummary,
   canPrepare,
   onPrepare,
+  onCreateItemClick,
 }: PrePrintItemListCardProps) {
   const pendingByItem = useMemo(() => {
     const map = new Map<string, SelectedLine[]>();
@@ -176,20 +181,33 @@ export default function PrePrintItemListCard({
             <CardDescription className="mt-0.5 text-xs sm:text-sm">
               {loadingList && items.length === 0
                 ? 'กำลังโหลด…'
-                : `แสดง ${items.length} จาก ${total} รายการ · เช็ค → กรอก lot → + เพิ่ม lot`}
+                : `แสดง ${items.length} จาก ${total} รายการ · กรอกจำนวน/วันหมดอายุ → + เพิ่ม lot`}
             </CardDescription>
           </div>
-          {pendingLines.length > 0 && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 self-start shrink-0 px-2 text-xs sm:text-sm"
-              onClick={onClearPending}
-            >
-              ล้าง lot เพิ่ม ({pendingLines.length})
-            </Button>
-          )}
+          <div className="flex flex-wrap items-center gap-2 self-start">
+            {onCreateItemClick && (
+              <Button
+                type="button"
+                size="sm"
+                className="h-8 shrink-0 px-2.5 text-xs sm:text-sm"
+                onClick={onCreateItemClick}
+              >
+                <Plus className="mr-1 h-3.5 w-3.5" />
+                สร้าง item
+              </Button>
+            )}
+            {pendingLines.length > 0 && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 shrink-0 px-2 text-xs sm:text-sm"
+                onClick={onClearPending}
+              >
+                ล้าง lot เพิ่ม ({pendingLines.length})
+              </Button>
+            )}
+          </div>
         </div>
         <BrandTabs brands={brands} selectedBrand={selectedBrand} onBrandChange={onBrandChange} />
         <Input
@@ -213,42 +231,38 @@ export default function PrePrintItemListCard({
             </p>
           ) : (
             items.map((row) => {
-              const checked = checkedItemcodes.has(row.itemcode);
               const draft = getItemDraft(row.itemcode) ?? DEFAULT_ITEM_DRAFT;
               const itemPending = pendingByItem.get(row.itemcode) ?? [];
+              const expireError = needsExpireWarning(draft.copies, draft.expireDate);
+              const active = draft.copies !== '' || itemPending.length > 0;
 
               return (
                 <div
                   key={row.itemcode}
                   className={cn(
                     'rounded-xl border bg-white p-3 transition-colors',
-                    checked ? 'border-violet-200 bg-violet-50/80' : 'border-slate-200',
+                    expireError
+                      ? 'border-red-400'
+                      : active
+                        ? 'border-violet-200 bg-violet-50/80'
+                        : 'border-slate-200',
                   )}
                 >
-                  <div className="flex items-start gap-3">
-                    <Checkbox
-                      checked={checked}
-                      onCheckedChange={() => onToggleCheck(row)}
-                      aria-label={`เลือก ${row.itemcode}`}
-                      className="mt-0.5"
-                    />
-                    <div className="min-w-0 flex-1 text-sm">
-                      <ItemNameWithUnit item={row} />
-                    </div>
+                  <div className="min-w-0 text-sm">
+                    <ItemNameWithUnit item={row} />
                   </div>
 
-                  {checked && (
-                    <div className="mt-3 border-t border-violet-100/80 pt-3">
-                      <DraftControls
-                        row={row}
-                        draft={draft}
-                        onDraftExpireChange={onDraftExpireChange}
-                        onDraftCopiesChange={onDraftCopiesChange}
-                        onAddSubLine={onAddSubLine}
-                        compact
-                      />
-                    </div>
-                  )}
+                  <div className="mt-3 border-t border-slate-100 pt-3">
+                    <DraftControls
+                      row={row}
+                      draft={draft}
+                      onDraftExpireChange={onDraftExpireChange}
+                      onDraftCopiesChange={onDraftCopiesChange}
+                      onAddSubLine={onAddSubLine}
+                      expireError={expireError}
+                      compact
+                    />
+                  </div>
 
                   {itemPending.length > 0 && (
                     <div className="mt-2 space-y-2">
@@ -258,6 +272,7 @@ export default function PrePrintItemListCard({
                           line={line}
                           idPrefix="pending-m"
                           variant="stack"
+                          expireError={needsExpireWarning(line.copies, line.expireDate)}
                           onSetCopies={onSetCopies}
                           onExpireDateChange={onExpireDateChange}
                           onRemoveLine={onRemoveLine}
@@ -276,8 +291,7 @@ export default function PrePrintItemListCard({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-12 pl-3">เลือก</TableHead>
-                <TableHead className="min-w-[140px]">ชื่ออุปกรณ์</TableHead>
+                <TableHead className="min-w-[140px] pl-3">ชื่ออุปกรณ์</TableHead>
                 <TableHead className="w-[148px]">วันหมดอายุ</TableHead>
                 <TableHead className="w-[88px] text-center">จำนวน</TableHead>
                 <TableHead className="w-12 text-center" />
@@ -286,92 +300,84 @@ export default function PrePrintItemListCard({
             <TableBody>
               {loadingList ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="py-10 text-center text-slate-500">
+                  <TableCell colSpan={4} className="py-10 text-center text-slate-500">
                     กำลังโหลด…
                   </TableCell>
                 </TableRow>
               ) : items.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="py-10 text-center text-slate-500">
+                  <TableCell colSpan={4} className="py-10 text-center text-slate-500">
                     ไม่มีรายการ
                   </TableCell>
                 </TableRow>
               ) : (
                 items.map((row) => {
-                  const checked = checkedItemcodes.has(row.itemcode);
                   const draft = getItemDraft(row.itemcode) ?? DEFAULT_ITEM_DRAFT;
                   const itemPending = pendingByItem.get(row.itemcode) ?? [];
+                  const expireError = needsExpireWarning(
+                    draft.copies,
+                    draft.expireDate,
+                  );
 
                   return (
                     <Fragment key={row.itemcode}>
-                      <TableRow className={cn(checked && 'bg-violet-50/90')}>
-                        <TableCell className="w-12 align-middle pl-3">
-                          <Checkbox
-                            checked={checked}
-                            onCheckedChange={() => onToggleCheck(row)}
-                            aria-label={`เลือก ${row.itemcode}`}
-                          />
-                        </TableCell>
-                        <TableCell className="min-w-0 align-middle py-2 text-sm">
+                      <TableRow
+                        className={cn(
+                          expireError && 'bg-red-50/70',
+                          !expireError && draft.copies !== '' && 'bg-violet-50/90',
+                        )}
+                      >
+                        <TableCell className="min-w-0 align-middle py-2 pl-3 text-sm">
                           <ItemNameWithUnit item={row} />
                         </TableCell>
-                        {checked ? (
-                          <>
-                            <TableCell className="py-2 align-middle">
-                              <div className="flex min-w-[8.5rem] items-center [&_input]:h-8 [&_button]:h-8 [&_button]:w-8">
-                                <DatePickerBE
-                                  id={`draft-expire-d-${row.itemcode}`}
-                                  className="items-center"
-                                  popoverPortal
-                                  value={draft.expireDate}
-                                  onChange={(v) => onDraftExpireChange(row.itemcode, v)}
-                                  placeholder="วว/ดด/ปปปป"
-                                />
-                              </div>
-                            </TableCell>
-                            <TableCell className="py-2 text-center align-middle">
-                              <Input
-                                type="text"
-                                inputMode="numeric"
-                                className="mx-auto h-8 w-16 bg-white text-center font-mono text-sm"
-                                value={draft.copies === '' ? '' : draft.copies}
-                                onChange={(e) => {
-                                  const v = e.target.value.trim();
-                                  if (v === '') {
-                                    onDraftCopiesChange(row.itemcode, '');
-                                    return;
-                                  }
-                                  const n = parseInt(v, 10);
-                                  if (Number.isFinite(n)) onDraftCopiesChange(row.itemcode, n);
-                                }}
-                              />
-                            </TableCell>
-                            <TableCell className="py-2 text-center align-middle">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="icon"
-                                className="h-8 w-8 shrink-0"
-                                aria-label={`เพิ่ม lot ${row.itemcode}`}
-                                onClick={() => onAddSubLine(row)}
-                              >
-                                <Plus className="h-4 w-4" />
-                              </Button>
-                            </TableCell>
-                          </>
-                        ) : (
-                          <>
-                            <TableCell className="py-2" />
-                            <TableCell className="py-2" />
-                            <TableCell className="py-2" />
-                          </>
-                        )}
+                        <TableCell className="py-2 align-middle">
+                          <div
+                            className={cn(
+                              'flex min-w-[8.5rem] items-center rounded-md p-0.5 [&_input]:h-8 [&_button]:h-8 [&_button]:w-8',
+                              expireError &&
+                                'ring-2 ring-red-500 bg-red-50/80 [&_input]:border-red-500 [&_button]:border-red-500',
+                            )}
+                          >
+                            <DatePickerBE
+                              id={`draft-expire-d-${row.itemcode}`}
+                              className="items-center"
+                              popoverPortal
+                              value={draft.expireDate}
+                              onChange={(v) => onDraftExpireChange(row.itemcode, v)}
+                              placeholder="วว/ดด/ปปปป"
+                            />
+                          </div>
+                        </TableCell>
+                        <TableCell className="py-2 text-center align-middle">
+                          <Input
+                            type="text"
+                            inputMode="numeric"
+                            className="mx-auto h-8 w-16 bg-white text-center font-mono text-sm"
+                            value={draft.copies === '' ? '' : draft.copies}
+                            onChange={(e) =>
+                              onDraftCopiesChange(row.itemcode, parseCopiesInput(e.target.value))
+                            }
+                          />
+                        </TableCell>
+                        <TableCell className="py-2 text-center align-middle">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8 shrink-0"
+                            aria-label={`เพิ่ม lot ${row.itemcode}`}
+                            onClick={() => onAddSubLine(row)}
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
                       </TableRow>
                       {itemPending.map((line) => (
                         <PrePrintSubLineRow
                           key={line.lineId}
                           line={line}
                           idPrefix="pending"
+                          expireError={needsExpireWarning(line.copies, line.expireDate)}
                           onSetCopies={onSetCopies}
                           onExpireDateChange={onExpireDateChange}
                           onRemoveLine={onRemoveLine}

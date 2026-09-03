@@ -14,7 +14,7 @@ import {
 } from './constants';
 import type { ItemDraft, SelectedLine } from './types';
 import { DEFAULT_ITEM_DRAFT } from './types';
-import { clampCopies, maxCopiesPerItem, resolveCopies } from './utils';
+import { clampCopies, hasExpireDate, maxCopiesPerItem, resolveCopies } from './utils';
 
 function newLineId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -34,7 +34,6 @@ export function usePrePrintSticker() {
 
   const [selectedLines, setSelectedLines] = useState<SelectedLine[]>([]);
   const [preparedOrderLines, setPreparedOrderLines] = useState<SelectedLine[]>([]);
-  const [checkedItemcodes, setCheckedItemcodes] = useState<Set<string>>(new Set());
   const [itemDrafts, setItemDrafts] = useState<Record<string, ItemDraft>>({});
 
   const [savingDocument, setSavingDocument] = useState(false);
@@ -186,26 +185,29 @@ export function usePrePrintSticker() {
   const countStagedRows = useCallback(() => {
     const cap = maxCopiesPerItem();
     let n = 0;
-    for (const code of checkedItemcodes) {
-      const draft = itemDrafts[code] ?? DEFAULT_ITEM_DRAFT;
+    for (const draft of Object.values(itemDrafts)) {
       if (resolveCopies(draft.copies, cap) > 0) n += 1;
     }
     n += selectedLines.length;
     return n;
-  }, [checkedItemcodes, itemDrafts, selectedLines]);
+  }, [itemDrafts, selectedLines]);
 
   const collectStagedLines = useCallback((): SelectedLine[] | null => {
     const cap = maxCopiesPerItem();
     const toAdd: SelectedLine[] = [];
+    let missingExpire = false;
 
-    for (const code of checkedItemcodes) {
-      const draft = itemDrafts[code] ?? DEFAULT_ITEM_DRAFT;
+    for (const [code, draft] of Object.entries(itemDrafts)) {
       const row = allItems.find((i) => i.itemcode === code);
       if (!row) continue;
       const mainCopies = resolveCopies(draft.copies, cap);
       if (mainCopies <= 0) continue;
+      if (!hasExpireDate(draft.expireDate)) {
+        missingExpire = true;
+        continue;
+      }
       toAdd.push({
-        ...buildLineFromRow(row, mainCopies, draft.expireDate ?? '', cap),
+        ...buildLineFromRow(row, mainCopies, draft.expireDate.trim(), cap),
         lineId: newLineId(),
       });
     }
@@ -213,11 +215,21 @@ export function usePrePrintSticker() {
     for (const l of selectedLines) {
       const copies = resolveCopies(l.copies, l.refillCap);
       if (copies <= 0) continue;
+      if (!hasExpireDate(l.expireDate)) {
+        missingExpire = true;
+        continue;
+      }
       toAdd.push({
         ...l,
         lineId: newLineId(),
         copies,
+        expireDate: l.expireDate.trim(),
       });
+    }
+
+    if (missingExpire) {
+      toast.error('กรุณากรอกวันหมดอายุให้ครบทุกรายการที่มีจำนวน');
+      return null;
     }
 
     if (toAdd.length === 0) {
@@ -236,7 +248,7 @@ export function usePrePrintSticker() {
     }
 
     return toAdd;
-  }, [allItems, buildLineFromRow, checkedItemcodes, itemDrafts, selectedLines]);
+  }, [allItems, buildLineFromRow, itemDrafts, selectedLines]);
 
   const getItemDraft = useCallback(
     (itemcode: string): ItemDraft => itemDrafts[itemcode] ?? DEFAULT_ITEM_DRAFT,
@@ -255,10 +267,7 @@ export function usePrePrintSticker() {
       ...prev,
       [itemcode]: {
         ...(prev[itemcode] ?? DEFAULT_ITEM_DRAFT),
-        copies:
-          raw === ''
-            ? ''
-            : clampCopies(raw, maxCopiesPerItem()),
+        copies: raw === '' || raw < 1 ? '' : clampCopies(raw, maxCopiesPerItem()),
       },
     }));
   }, []);
@@ -266,28 +275,9 @@ export function usePrePrintSticker() {
   const handleBrandChange = (brand: string) => {
     setSelectedBrand(brand);
     setKeywordInput('');
-    // เก็บ checkbox / draft / lot ที่กรอกไว้ — สลับยี่ห้อแค่กรองรายการ ไม่ล้างงานที่ค้าง
-  };
-
-  const toggleCheck = (row: Item) => {
-    const code = row.itemcode;
-    setCheckedItemcodes((prev) => {
-      const next = new Set(prev);
-      if (next.has(code)) {
-        next.delete(code);
-        setSelectedLines((lines) => lines.filter((l) => l.itemcode !== code));
-      } else {
-        next.add(code);
-      }
-      return next;
-    });
   };
 
   const addSubLine = (row: Item) => {
-    if (!checkedItemcodes.has(row.itemcode)) {
-      toast.error('เช็ครายการก่อนเพิ่ม lot');
-      return;
-    }
     if (countStagedRows() >= MAX_PRINT) {
       toast.error(`เพิ่มได้ไม่เกิน ${MAX_PRINT} lot ต่อครั้ง`);
       return;
@@ -299,7 +289,7 @@ export function usePrePrintSticker() {
     setSelectedLines((prev) =>
       prev.map((l) => {
         if (l.lineId !== lineId) return l;
-        if (raw === '') return { ...l, copies: '' };
+        if (raw === '' || raw < 1) return { ...l, copies: '' };
         return { ...l, copies: clampCopies(raw, l.refillCap) };
       }),
     );
@@ -325,21 +315,27 @@ export function usePrePrintSticker() {
   };
 
   const handleSaveDocument = async (): Promise<boolean> => {
-    const payloadLines = preparedOrderLines
+    const withQty = preparedOrderLines.filter(
+      (l) => resolveCopies(l.copies, l.refillCap) > 0,
+    );
+    if (withQty.some((l) => !hasExpireDate(l.expireDate))) {
+      toast.error('กรุณากรอกวันหมดอายุให้ครบทุกรายการที่มีจำนวน');
+      return false;
+    }
+
+    const payloadLines = withQty
       .map((l) => {
         const copies = resolveCopies(l.copies, l.refillCap);
-        if (copies <= 0) return null;
         const exp = (l.expireDate ?? '').trim();
         const lot = (l.lotNo ?? '').trim();
         return {
           itemcode: l.itemcode,
           item_name: l.itemname,
           copies,
-          ...(exp ? { expire_date: exp } : {}),
+          expire_date: exp,
           ...(lot ? { lot_no: lot.slice(0, 50) } : {}),
         };
-      })
-      .filter((l): l is NonNullable<typeof l> => l != null);
+      });
 
     if (payloadLines.length === 0) {
       toast.error('ไม่มีรายการที่บันทึกได้ — ตรวจสอบจำนวน');
@@ -391,7 +387,7 @@ export function usePrePrintSticker() {
 
     setPreparedOrderLines((prev) => [...prev, ...toAdd]);
     setSelectedLines([]);
-    setCheckedItemcodes(new Set());
+    setItemDrafts({});
     toast.success(`เตรียมพิมพ์ ${toAdd.length} lot`);
   };
 
@@ -399,7 +395,7 @@ export function usePrePrintSticker() {
     setPreparedOrderLines((prev) =>
       prev.map((l) => {
         if (l.lineId !== lineId) return l;
-        if (raw === '') return { ...l, copies: '' };
+        if (raw === '' || raw < 1) return { ...l, copies: '' };
         return { ...l, copies: clampCopies(raw, l.refillCap) };
       }),
     );
@@ -421,19 +417,18 @@ export function usePrePrintSticker() {
 
   const canPrepare = useMemo(() => {
     const cap = maxCopiesPerItem();
-    for (const code of checkedItemcodes) {
-      const draft = itemDrafts[code] ?? DEFAULT_ITEM_DRAFT;
+    for (const draft of Object.values(itemDrafts)) {
       if (resolveCopies(draft.copies, cap) > 0) return true;
     }
     return selectedLines.some((l) => resolveCopies(l.copies, l.refillCap) > 0);
-  }, [checkedItemcodes, itemDrafts, selectedLines]);
+  }, [itemDrafts, selectedLines]);
 
   const stagedSummary = useMemo(() => {
     const cap = maxCopiesPerItem();
     let rows = 0;
     let sheets = 0;
-    for (const code of checkedItemcodes) {
-      const c = resolveCopies((itemDrafts[code] ?? DEFAULT_ITEM_DRAFT).copies, cap);
+    for (const draft of Object.values(itemDrafts)) {
+      const c = resolveCopies(draft.copies, cap);
       if (c > 0) {
         rows += 1;
         sheets += c;
@@ -447,7 +442,7 @@ export function usePrePrintSticker() {
       }
     }
     return { rows, sheets };
-  }, [checkedItemcodes, itemDrafts, selectedLines]);
+  }, [itemDrafts, selectedLines]);
 
   const initialLoading = loadingBrands || (loadingList && allItems.length === 0);
 
@@ -466,8 +461,6 @@ export function usePrePrintSticker() {
     keywordInput,
     setKeywordInput,
     handlePageChange,
-    checkedItemcodes,
-    toggleCheck,
     getItemDraft,
     setItemDraftExpire,
     setItemDraftCopies,

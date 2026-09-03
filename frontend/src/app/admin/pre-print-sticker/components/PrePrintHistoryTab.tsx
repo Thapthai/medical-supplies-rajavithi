@@ -9,7 +9,9 @@ import {
   FileText,
   Loader2,
   Package,
+  // Pencil,
   RefreshCw,
+  Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -31,11 +33,16 @@ import {
 import PrePrintHistoryFilterCard, {
   type PrePrintHistoryFilters,
 } from './PrePrintHistoryFilterCard';
+import {
+  // EditPrePrintStickerDialog,
+  DeletePrePrintStickerDialog,
+} from './EditPrePrintStickerDialog';
 
 const ITEMS_PER_PAGE = 10;
 /** ซ่อนปุ่ม PDF รายแถวชั่วคราว — เปิดอีกครั้งเมื่อพร้อม */
 const SHOW_ROW_PDF = false;
-const COLUMN_COUNT = SHOW_ROW_PDF ? 8 : 7;
+/** expand + ลำดับ + doc + date + lot + sheets + creator + actions (+ optional PDF) */
+const COLUMN_COUNT = SHOW_ROW_PDF ? 9 : 8;
 
 function getTodayDate(): string {
   const today = new Date();
@@ -185,6 +192,8 @@ export default function PrePrintHistoryTab({ refreshKey = 0 }: PrePrintHistoryTa
   const [exportLoading, setExportLoading] = useState<'excel' | 'pdf' | null>(null);
   const [filters, setFilters] = useState<PrePrintHistoryFilters>(defaultFilters);
   const [appliedFilters, setAppliedFilters] = useState<PrePrintHistoryFilters>(defaultFilters);
+  // const [editDoc, setEditDoc] = useState<PrePrintStickerDocument | null>(null);
+  const [deleteDoc, setDeleteDoc] = useState<PrePrintStickerDocument | null>(null);
 
   const loadHistory = useCallback(async () => {
     try {
@@ -308,6 +317,86 @@ export default function PrePrintHistoryTab({ refreshKey = 0 }: PrePrintHistoryTa
       setExportLoading(null);
     }
   };
+
+  // const openEdit = (doc: PrePrintStickerDocument, e?: MouseEvent) => {
+  //   e?.stopPropagation();
+  //   setEditDoc(doc);
+  // };
+
+  const openDelete = (doc: PrePrintStickerDocument, e?: MouseEvent) => {
+    e?.stopPropagation();
+    setDeleteDoc(doc);
+  };
+
+  // const handleEditSuccess = (updated: PrePrintStickerDocument) => {
+  //   setHistory((prev) => prev.map((d) => (d.id === updated.id ? { ...d, ...updated } : d)));
+  //   setDetailById((prev) => {
+  //     const next = new Map(prev);
+  //     next.set(updated.id, updated);
+  //     return next;
+  //   });
+  //   void loadHistory();
+  // };
+
+  const handleDeleteSuccess = (id: number) => {
+    setHistory((prev) => prev.filter((d) => d.id !== id));
+    setDetailById((prev) => {
+      const next = new Map(prev);
+      next.delete(id);
+      return next;
+    });
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    setTotal((t) => Math.max(0, t - 1));
+    void loadHistory();
+  };
+
+  const rowActions = (doc: PrePrintStickerDocument) => (
+    <div className="flex items-center justify-end gap-1.5">
+      {/* ซ่อนปุ่มแก้ไขชั่วคราว
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        className="h-8 w-8"
+        title={`แก้ไข ${doc.doc_no}`}
+        onClick={(e) => openEdit(doc, e)}
+      >
+        <Pencil className="h-3.5 w-3.5" />
+      </Button>
+      */}
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        className="h-8 w-8 text-destructive hover:text-destructive"
+        title={`ลบ ${doc.doc_no}`}
+        onClick={(e) => openDelete(doc, e)}
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </Button>
+      {SHOW_ROW_PDF && (
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="h-8 w-8"
+          title={`ดาวน์โหลด PDF ${doc.doc_no}`}
+          disabled={rowPdfLoadingId !== null}
+          onClick={(e) => void handleDownloadRowPdf(doc, e)}
+        >
+          {rowPdfLoadingId === doc.id ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <FileDown className="h-3.5 w-3.5" />
+          )}
+        </Button>
+      )}
+    </div>
+  );
 
   const rowOffset = (page - 1) * ITEMS_PER_PAGE;
   const pageNumbers = useMemo(() => generatePageNumbers(page, lastPage), [page, lastPage]);
@@ -543,23 +632,7 @@ export default function PrePrintHistoryTab({ refreshKey = 0 }: PrePrintHistoryTa
                             </div>
                           </div>
                         </button>
-                        {SHOW_ROW_PDF && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            className="mt-0.5 h-8 w-8 shrink-0"
-                            title={`ดาวน์โหลด PDF ${doc.doc_no}`}
-                            disabled={rowPdfLoadingId !== null}
-                            onClick={(e) => void handleDownloadRowPdf(doc, e)}
-                          >
-                            {rowPdfLoadingId === doc.id ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <FileDown className="h-3.5 w-3.5" />
-                            )}
-                          </Button>
-                        )}
+                        {rowActions(doc)}
                       </div>
                       {isExpanded && (
                         <div className="border-t bg-gray-50 px-3 py-3">
@@ -583,9 +656,7 @@ export default function PrePrintHistoryTab({ refreshKey = 0 }: PrePrintHistoryTa
                       <TableHead className="text-center min-w-[6rem]">Lot</TableHead>
                       <TableHead className="text-center min-w-[6rem]">แผ่น</TableHead>
                       <TableHead>ผู้บันทึก</TableHead>
-                      {SHOW_ROW_PDF && (
-                        <TableHead className="w-[88px] text-center">PDF</TableHead>
-                      )}
+                      <TableHead className="w-[120px] text-center">จัดการ</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -635,25 +706,7 @@ export default function PrePrintHistoryTab({ refreshKey = 0 }: PrePrintHistoryTa
                             <TableCell className="text-muted-foreground">
                               {creatorLabel(doc)}
                             </TableCell>
-                            {SHOW_ROW_PDF && (
-                              <TableCell className="text-center">
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="icon"
-                                  className="h-8 w-8"
-                                  title={`ดาวน์โหลด PDF ${doc.doc_no}`}
-                                  disabled={rowPdfLoadingId !== null}
-                                  onClick={(e) => void handleDownloadRowPdf(doc, e)}
-                                >
-                                  {rowPdfLoadingId === doc.id ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                  ) : (
-                                    <FileDown className="h-4 w-4" />
-                                  )}
-                                </Button>
-                              </TableCell>
-                            )}
+                            <TableCell className="text-center">{rowActions(doc)}</TableCell>
                           </TableRow>
 
                           {isExpanded && (
@@ -737,6 +790,25 @@ export default function PrePrintHistoryTab({ refreshKey = 0 }: PrePrintHistoryTa
           )}
         </CardContent>
       </Card>
+
+      {/* ซ่อน dialog แก้ไขชั่วคราว
+      <EditPrePrintStickerDialog
+        open={editDoc != null}
+        doc={editDoc}
+        onOpenChange={(open) => {
+          if (!open) setEditDoc(null);
+        }}
+        onSuccess={handleEditSuccess}
+      />
+      */}
+      <DeletePrePrintStickerDialog
+        open={deleteDoc != null}
+        doc={deleteDoc}
+        onOpenChange={(open) => {
+          if (!open) setDeleteDoc(null);
+        }}
+        onSuccess={handleDeleteSuccess}
+      />
     </div>
   );
 }

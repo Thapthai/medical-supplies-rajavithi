@@ -2632,4 +2632,78 @@ export class ItemService {
       };
     }
   }
+
+  /**
+   * รหัสระบบถัดไป — UI + ตัวเลข 5 หลัก (UI00001, UI00002, ...)
+   * อิงจาก itemcode ที่ขึ้นต้นด้วย UI ตามด้วยตัวเลขเท่านั้น
+   */
+  async getNextUiItemcode() {
+    try {
+      const rows = await this.prisma.item.findMany({
+        where: { itemcode: { startsWith: 'UI' } },
+        select: { itemcode: true },
+      });
+
+      let maxNum = 0;
+      for (const row of rows) {
+        const code = String(row.itemcode ?? '').trim().toUpperCase();
+        const m = /^UI(\d+)$/.exec(code);
+        if (!m) continue;
+        const n = parseInt(m[1], 10);
+        if (Number.isFinite(n) && n > maxNum) maxNum = n;
+      }
+
+      const next = maxNum + 1;
+      const itemcode = `UI${String(next).padStart(5, '0')}`;
+
+      return {
+        success: true,
+        data: { itemcode, next },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: 'Failed to generate next UI item code',
+        error: (error as Error)?.message ?? String(error),
+        data: null,
+      };
+    }
+  }
+
+  /** รายการประเภทอุปกรณ์จากตาราง itemtype */
+  async getItemTypes(keyword?: string) {
+    try {
+      const kw = keyword?.trim();
+      const where: Prisma.ItemTypeWhereInput = {
+        OR: [{ IsCancel: false }, { IsCancel: null }],
+      };
+      if (kw) {
+        where.AND = [{ TypeName: { contains: kw } }];
+      }
+
+      const rows = await this.prisma.itemType.findMany({
+        where,
+        orderBy: { TypeName: 'asc' },
+        select: { ID: true, TypeName: true },
+        take: 200,
+      });
+
+      return {
+        success: true,
+        data: rows.map((r) => ({
+          id: r.ID,
+          name: (r.TypeName ?? '').trim() || `ประเภท #${r.ID}`,
+        })),
+        total: rows.length,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: 'Failed to fetch item types',
+        error: (error as Error)?.message ?? String(error),
+        data: [],
+        total: 0,
+      };
+    }
+  }
 }

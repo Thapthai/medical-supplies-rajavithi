@@ -162,6 +162,18 @@ export class ItemController {
     return this.itemService.getItemBrandGroups(keyword);
   }
 
+  /** รหัสระบบถัดไปรูปแบบ UI00001, UI00002, ... */
+  @Get('next-ui-code')
+  async getNextUiCode() {
+    return this.itemService.getNextUiItemcode();
+  }
+
+  /** รายการประเภทอุปกรณ์ (itemtype) */
+  @Get('item-types')
+  async getItemTypes(@Query('keyword') keyword?: string) {
+    return this.itemService.getItemTypes(keyword);
+  }
+
   /** รายการจาก slot ในตู้ (+ จำนวนในตู้ / max / ต้องเติม) — ใช้เลือกพิมพ์สติ๊กเกอร์์ */
   @Get('cabinet-slot-items')
   async findCabinetSlotItems(

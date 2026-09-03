@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/table';
 import type { Item } from '@/types/item';
 import type { SelectedLine } from '../types';
-import { resolveCopies } from '../utils';
+import { resolveCopies, hasExpireDate, parseCopiesInput } from '../utils';
 import { cn } from '@/lib/utils';
 
 type PrePrintOrderCardProps = {
@@ -44,17 +44,9 @@ function QtyInput({
       type="text"
       inputMode="numeric"
       className="h-8 w-16 bg-white text-center font-mono text-sm"
-      value={line.refillCap <= 0 ? 0 : line.copies === '' ? '' : line.copies}
+      value={line.refillCap <= 0 ? '' : line.copies === '' ? '' : line.copies}
       disabled={inputDisabled}
-      onChange={(e) => {
-        const v = e.target.value.trim();
-        if (v === '') {
-          onSetCopies(line.lineId, '');
-          return;
-        }
-        const n = parseInt(v, 10);
-        if (Number.isFinite(n)) onSetCopies(line.lineId, n);
-      }}
+      onChange={(e) => onSetCopies(line.lineId, parseCopiesInput(e.target.value))}
     />
   );
 }
@@ -72,13 +64,33 @@ function LotControls({
   onRemoveLine: (lineId: string) => void;
   showLabels?: boolean;
 }) {
+  const expireError =
+    line.copies !== '' && !hasExpireDate(line.expireDate);
+
   return (
-    <div className="flex flex-wrap items-end gap-2">
+    <div
+      className={cn(
+        'flex flex-wrap items-end gap-2 rounded-md p-1.5 -m-1.5',
+        expireError && 'ring-2 ring-red-500 bg-red-50/60',
+      )}
+    >
       <div className="min-w-0 grow basis-[9rem]">
         {showLabels && (
-          <span className="mb-1 block text-[11px] font-medium text-muted-foreground">วันหมดอายุ</span>
+          <span
+            className={cn(
+              'mb-1 block text-[11px] font-medium',
+              expireError ? 'text-red-600' : 'text-muted-foreground',
+            )}
+          >
+            วันหมดอายุ
+          </span>
         )}
-        <div className="flex items-center [&_input]:h-8 [&_button]:h-8 [&_button]:w-8">
+        <div
+          className={cn(
+            'flex items-center [&_input]:h-8 [&_button]:h-8 [&_button]:w-8',
+            expireError && '[&_input]:border-red-500 [&_button]:border-red-500',
+          )}
+        >
           <DatePickerBE
             id={`prepared-expire-${line.lineId}`}
             className="items-center"
@@ -263,13 +275,25 @@ export default function PrePrintOrderCard({
                             </div>
                           </TableCell>
                         </TableRow>
-                        {lines.map((line, idx) => (
-                          <TableRow key={line.lineId} className="bg-white">
+                        {lines.map((line, idx) => {
+                          const expireError =
+                            line.copies !== '' && !hasExpireDate(line.expireDate);
+                          return (
+                          <TableRow
+                            key={line.lineId}
+                            className={cn('bg-white', expireError && 'bg-red-50/70')}
+                          >
                             <TableCell className="py-2 pl-6 text-xs text-muted-foreground">
                               Lot {idx + 1}
                             </TableCell>
                             <TableCell className="py-2 align-middle">
-                              <div className="flex min-w-[8.5rem] items-center [&_input]:h-8 [&_button]:h-8 [&_button]:w-8">
+                              <div
+                                className={cn(
+                                  'flex min-w-[8.5rem] items-center rounded-md p-0.5 [&_input]:h-8 [&_button]:h-8 [&_button]:w-8',
+                                  expireError &&
+                                    'ring-2 ring-red-500 bg-red-50/80 [&_input]:border-red-500 [&_button]:border-red-500',
+                                )}
+                              >
                                 <DatePickerBE
                                   id={`prepared-d-expire-${line.lineId}`}
                                   className="items-center"
@@ -298,7 +322,8 @@ export default function PrePrintOrderCard({
                               </Button>
                             </TableCell>
                           </TableRow>
-                        ))}
+                          );
+                        })}
                       </Fragment>
                     );
                   })}
