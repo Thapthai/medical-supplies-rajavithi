@@ -25,7 +25,7 @@ interface DatePickerBEProps {
 export function DatePickerBE({
   value,
   onChange,
-  placeholder = 'วว/ดด/ปปปป (พ.ศ.)',
+  placeholder = 'ววดดปปปป หรือ วว/ดด/ปปปป',
   className,
   id,
   disabled,
@@ -47,6 +47,19 @@ export function DatePickerBE({
     left: number;
     minWidth: number;
   } | null>(null);
+
+  const commitInput = React.useCallback(
+    (raw: string) => {
+      const ce = parseBEDMYToCE(raw);
+      if (ce) {
+        onChange(ce);
+        setInputText(formatCEToBEDMY(ce));
+        return true;
+      }
+      return false;
+    },
+    [onChange],
+  );
 
   const updatePortalPlacement = React.useCallback(() => {
     if (!popoverPortal || !open || !containerRef.current) return;
@@ -88,17 +101,28 @@ export function DatePickerBE({
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = e.target.value;
     setInputText(v);
+    // พิมพ์ตัวเลขล้วนครบ 8 หลัก (DDMMYYYY) แล้วแปลงทันที — 6 หลักรอ blur/Enter
+    const trimmed = v.trim();
+    if (/^\d{8}$/.test(trimmed)) {
+      commitInput(trimmed);
+    }
   };
 
   const handleBlur = () => {
-    const ce = parseBEDMYToCE(inputText);
-    if (ce) {
-      onChange(ce);
-      setInputText(formatCEToBEDMY(ce));
-    } else if (value) {
+    if (commitInput(inputText)) return;
+    if (value) {
       setInputText(formatCEToBEDMY(value));
     } else {
       setInputText('');
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (commitInput(inputText)) {
+        (e.target as HTMLInputElement).blur();
+      }
     }
   };
 
@@ -218,6 +242,7 @@ export function DatePickerBE({
         value={inputText}
         onChange={handleInputChange}
         onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
         disabled={disabled}
         className={cn(
           'min-w-0 flex-1 rounded-r-none border-r-0 font-medium shadow-none',
