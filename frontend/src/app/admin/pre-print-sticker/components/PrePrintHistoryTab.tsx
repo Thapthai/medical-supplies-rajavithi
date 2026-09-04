@@ -1,9 +1,7 @@
 'use client';
 
-import { Fragment, useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react';
 import {
-  ChevronDown,
-  ChevronRight,
   Download,
   FileDown,
   FileText,
@@ -17,6 +15,13 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   Table,
   TableBody,
   TableCell,
@@ -25,6 +30,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
+import { naturalCompare } from '@/lib/naturalCompare';
 import {
   stickerPrintApi,
   type PrePrintStickerDetailRow,
@@ -41,8 +47,6 @@ import {
 const ITEMS_PER_PAGE = 10;
 /** ซ่อนปุ่ม PDF รายแถวชั่วคราว — เปิดอีกครั้งเมื่อพร้อม */
 const SHOW_ROW_PDF = false;
-/** expand + ลำดับ + doc + date + lot + sheets + creator + actions (+ optional PDF) */
-const COLUMN_COUNT = SHOW_ROW_PDF ? 9 : 8;
 
 function getTodayDate(): string {
   const today = new Date();
@@ -57,9 +61,23 @@ function defaultFilters(): PrePrintHistoryFilters {
   return { keyword: '', startDate: today, endDate: today };
 }
 
+const CE_DATE_OPTS: Intl.DateTimeFormatOptions = {
+  calendar: 'gregory',
+  timeZone: 'Asia/Bangkok',
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+};
+
 function formatThDateTime(iso: string): string {
   try {
-    return new Date(iso).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' });
+    return new Date(iso).toLocaleString('th-TH', {
+      ...CE_DATE_OPTS,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    });
   } catch {
     return iso;
   }
@@ -67,12 +85,7 @@ function formatThDateTime(iso: string): string {
 
 function formatThDateOnly(iso: string): string {
   try {
-    return new Date(iso).toLocaleDateString('th-TH', {
-      timeZone: 'Asia/Bangkok',
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
+    return new Date(iso).toLocaleDateString('th-TH', CE_DATE_OPTS);
   } catch {
     return iso;
   }
@@ -81,7 +94,7 @@ function formatThDateOnly(iso: string): string {
 function formatExpireDate(iso: string | null | undefined): string {
   if (!iso) return '—';
   try {
-    return new Date(iso).toLocaleDateString('th-TH', { timeZone: 'Asia/Bangkok' });
+    return new Date(iso).toLocaleDateString('th-TH', CE_DATE_OPTS);
   } catch {
     return iso;
   }
@@ -102,9 +115,9 @@ function statusLabel(status: string): string {
 function groupDetailsByItem(details: PrePrintStickerDetailRow[]) {
   const map = new Map<string, PrePrintStickerDetailRow[]>();
   const sorted = [...details].sort((a, b) => {
-    const nameA = (a.item_name ?? a.itemcode ?? '').localeCompare(b.item_name ?? b.itemcode ?? '', 'th');
+    const nameA = naturalCompare(a.item_name ?? a.itemcode ?? '', b.item_name ?? b.itemcode ?? '');
     if (nameA !== 0) return nameA;
-    return a.itemcode.localeCompare(b.itemcode, 'th');
+    return naturalCompare(a.itemcode, b.itemcode);
   });
   for (const line of sorted) {
     const list = map.get(line.itemcode) ?? [];
@@ -112,17 +125,17 @@ function groupDetailsByItem(details: PrePrintStickerDetailRow[]) {
     map.set(line.itemcode, list);
   }
   return [...map.entries()].sort((a, b) => {
-    const nameA = (a[1][0]?.item_name ?? a[0]).localeCompare(b[1][0]?.item_name ?? b[0], 'th');
+    const nameA = naturalCompare(a[1][0]?.item_name ?? a[0], b[1][0]?.item_name ?? b[0]);
     if (nameA !== 0) return nameA;
-    return a[0].localeCompare(b[0], 'th');
+    return naturalCompare(a[0], b[0]);
   });
 }
 
 function sortDetailsByItemName(details: PrePrintStickerDetailRow[]) {
   return [...details].sort((a, b) => {
-    const nameA = (a.item_name ?? a.itemcode ?? '').localeCompare(b.item_name ?? b.itemcode ?? '', 'th');
+    const nameA = naturalCompare(a.item_name ?? a.itemcode ?? '', b.item_name ?? b.itemcode ?? '');
     if (nameA !== 0) return nameA;
-    return a.itemcode.localeCompare(b.itemcode, 'th');
+    return naturalCompare(a.itemcode, b.itemcode);
   });
 }
 
@@ -185,9 +198,9 @@ export default function PrePrintHistoryTab({ refreshKey = 0 }: PrePrintHistoryTa
   const [page, setPage] = useState(1);
   const [lastPage, setLastPage] = useState(1);
   const [total, setTotal] = useState(0);
-  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [detailById, setDetailById] = useState<Map<number, PrePrintStickerDocument>>(new Map());
   const [detailLoadingId, setDetailLoadingId] = useState<number | null>(null);
+  const [viewDoc, setViewDoc] = useState<PrePrintStickerDocument | null>(null);
   const [rowPdfLoadingId, setRowPdfLoadingId] = useState<number | null>(null);
   const [exportLoading, setExportLoading] = useState<'excel' | 'pdf' | null>(null);
   const [filters, setFilters] = useState<PrePrintHistoryFilters>(defaultFilters);
@@ -222,7 +235,7 @@ export default function PrePrintHistoryTab({ refreshKey = 0 }: PrePrintHistoryTa
   }, [loadHistory, refreshKey]);
 
   useEffect(() => {
-    setExpandedIds(new Set());
+    setViewDoc(null);
     setDetailById(new Map());
   }, [page, appliedFilters]);
 
@@ -266,15 +279,10 @@ export default function PrePrintHistoryTab({ refreshKey = 0 }: PrePrintHistoryTa
     }
   };
 
-  const toggleExpand = async (doc: PrePrintStickerDocument) => {
-    const willExpand = !expandedIds.has(doc.id);
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(doc.id)) next.delete(doc.id);
-      else next.add(doc.id);
-      return next;
-    });
-    if (willExpand) await ensureDetail(doc);
+  const openDetailPopup = async (doc: PrePrintStickerDocument, e?: MouseEvent) => {
+    e?.stopPropagation();
+    setViewDoc(doc);
+    await ensureDetail(doc);
   };
 
   const handleDownloadRowPdf = async (doc: PrePrintStickerDocument, e?: MouseEvent) => {
@@ -345,17 +353,17 @@ export default function PrePrintHistoryTab({ refreshKey = 0 }: PrePrintHistoryTa
       next.delete(id);
       return next;
     });
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
+    setViewDoc((prev) => (prev?.id === id ? null : prev));
     setTotal((t) => Math.max(0, t - 1));
     void loadHistory();
   };
 
   const rowActions = (doc: PrePrintStickerDocument) => (
-    <div className="flex items-center justify-end gap-1.5">
+    <div
+      className="flex items-center justify-end gap-1.5"
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
+    >
       {/* ซ่อนปุ่มแก้ไขชั่วคราว
       <Button
         type="button"
@@ -403,10 +411,10 @@ export default function PrePrintHistoryTab({ refreshKey = 0 }: PrePrintHistoryTa
 
   const descriptionText =
     history.length > 0
-      ? `แสดง ${history.length} เอกสารในหน้านี้ · รวม ${total.toLocaleString()} เอกสาร · คลิกแถวเพื่อดู lot`
+      ? `แสดง ${history.length} เอกสารในหน้านี้ · รวม ${total.toLocaleString()} เอกสาร · คลิกแถวเพื่อดูรายการ`
       : 'เอกสารเตรียมพิมพ์สติ๊กเกอร์ที่บันทึกไว้';
 
-  const renderExpandedDetail = (doc: PrePrintStickerDocument) => {
+  const renderDetailBody = (doc: PrePrintStickerDocument) => {
     const detail = detailById.get(doc.id);
     const loadingDetail = detailLoadingId === doc.id;
 
@@ -582,63 +590,50 @@ export default function PrePrintHistoryTab({ refreshKey = 0 }: PrePrintHistoryTa
             </div>
           ) : (
             <>
-              {/* Mobile list — DispensedTable style */}
+              {/* Mobile list */}
               <div className="divide-y rounded-md border bg-white md:hidden">
                 {history.map((doc, index) => {
-                  const isExpanded = expandedIds.has(doc.id);
                   const rowNum = rowOffset + index + 1;
                   return (
-                    <div key={doc.id} className={cn(isExpanded && 'bg-slate-50/60')}>
-                      <div className="flex w-full items-start gap-2 px-3 py-2.5">
-                        <button
-                          type="button"
-                          onClick={() => void toggleExpand(doc)}
-                          className="mt-0.5 shrink-0 text-slate-500 touch-manipulation"
-                          aria-expanded={isExpanded}
-                          aria-label={isExpanded ? 'ย่อ' : 'ขยาย'}
-                        >
-                          {isExpanded ? (
-                            <ChevronDown className="h-4 w-4" />
-                          ) : (
-                            <ChevronRight className="h-4 w-4" />
-                          )}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void toggleExpand(doc)}
-                          className="min-w-0 flex-1 text-left touch-manipulation active:opacity-80"
-                        >
-                          <div className="flex items-start gap-2">
-                            <span className="mt-0.5 w-6 shrink-0 text-sm tabular-nums text-muted-foreground">
-                              {rowNum}
-                            </span>
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-medium leading-snug break-words text-slate-800">
-                                {doc.doc_no}
-                              </p>
-                              <div className="mt-0.5 text-xs text-muted-foreground">
-                                {formatThDateOnly(doc.created_at)} · {creatorLabel(doc)}
-                              </div>
-                              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                                <StatBadge
-                                  value={doc._count?.details ?? doc.total_lines}
-                                  unit="lot"
-                                />
-                                <StatBadge value={doc.total_sheets} unit="แผ่น" tone="violet" />
-                                <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-700">
-                                  {statusLabel(doc.status)}
-                                </span>
-                              </div>
+                    <div
+                      key={doc.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => void openDetailPopup(doc)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          void openDetailPopup(doc);
+                        }
+                      }}
+                      className="flex w-full cursor-pointer items-start gap-2 px-3 py-2.5 touch-manipulation active:bg-slate-50"
+                    >
+                      <div className="min-w-0 flex-1 text-left">
+                        <div className="flex items-start gap-2">
+                          <span className="mt-0.5 w-6 shrink-0 text-sm tabular-nums text-muted-foreground">
+                            {rowNum}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium leading-snug break-words text-slate-800">
+                              {doc.doc_no}
+                            </p>
+                            <div className="mt-0.5 text-xs text-muted-foreground">
+                              {formatThDateOnly(doc.created_at)} · {creatorLabel(doc)}
+                            </div>
+                            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                              <StatBadge
+                                value={doc._count?.details ?? doc.total_lines}
+                                unit="lot"
+                              />
+                              <StatBadge value={doc.total_sheets} unit="แผ่น" tone="violet" />
+                              <span className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-700">
+                                {statusLabel(doc.status)}
+                              </span>
                             </div>
                           </div>
-                        </button>
-                        {rowActions(doc)}
-                      </div>
-                      {isExpanded && (
-                        <div className="border-t bg-gray-50 px-3 py-3">
-                          {renderExpandedDetail(doc)}
                         </div>
-                      )}
+                      </div>
+                      {rowActions(doc)}
                     </div>
                   );
                 })}
@@ -649,74 +644,47 @@ export default function PrePrintHistoryTab({ refreshKey = 0 }: PrePrintHistoryTa
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-12" />
                       <TableHead className="w-[72px]">ลำดับ</TableHead>
                       <TableHead>เลขที่เอกสาร</TableHead>
                       <TableHead>วันที่บันทึก</TableHead>
-                      <TableHead className="text-center min-w-[6rem]">Lot</TableHead>
-                      <TableHead className="text-center min-w-[6rem]">แผ่น</TableHead>
+                      <TableHead className="min-w-[6rem] text-center">Lot</TableHead>
+                      <TableHead className="min-w-[6rem] text-center">แผ่น</TableHead>
                       <TableHead>ผู้บันทึก</TableHead>
                       <TableHead className="w-[120px] text-center">จัดการ</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {history.map((doc, index) => {
-                      const isExpanded = expandedIds.has(doc.id);
                       const rowNum = rowOffset + index + 1;
                       return (
-                        <Fragment key={doc.id}>
-                          <TableRow
-                            className={cn(
-                              'transition-colors',
-                              isExpanded ? 'bg-slate-50/80' : 'hover:bg-slate-50/80',
-                            )}
-                          >
-                            <TableCell className="w-12">
-                              <button
-                                type="button"
-                                onClick={() => void toggleExpand(doc)}
-                                className="rounded p-1 hover:bg-gray-200"
-                                aria-label={isExpanded ? 'ย่อ' : 'ขยาย'}
-                              >
-                                {isExpanded ? (
-                                  <ChevronDown className="h-4 w-4 text-slate-600" />
-                                ) : (
-                                  <ChevronRight className="h-4 w-4 text-slate-600" />
-                                )}
-                              </button>
-                            </TableCell>
-                            <TableCell className="font-medium text-slate-700">{rowNum}</TableCell>
-                            <TableCell>
-                              <code className="rounded bg-gray-100 px-2 py-1 text-xs">
-                                {doc.doc_no}
-                              </code>
-                            </TableCell>
-                            <TableCell className="text-muted-foreground">
-                              {formatThDateTime(doc.created_at)}
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <StatBadge
-                                value={doc._count?.details ?? doc.total_lines}
-                                unit="lot"
-                              />
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <StatBadge value={doc.total_sheets} unit="แผ่น" tone="violet" />
-                            </TableCell>
-                            <TableCell className="text-muted-foreground">
-                              {creatorLabel(doc)}
-                            </TableCell>
-                            <TableCell className="text-center">{rowActions(doc)}</TableCell>
-                          </TableRow>
-
-                          {isExpanded && (
-                            <TableRow>
-                              <TableCell colSpan={COLUMN_COUNT} className="bg-gray-50 p-4">
-                                {renderExpandedDetail(doc)}
-                              </TableCell>
-                            </TableRow>
-                          )}
-                        </Fragment>
+                        <TableRow
+                          key={doc.id}
+                          className="cursor-pointer transition-colors hover:bg-slate-50/80"
+                          onClick={() => void openDetailPopup(doc)}
+                        >
+                          <TableCell className="font-medium text-slate-700">{rowNum}</TableCell>
+                          <TableCell>
+                            <code className="rounded bg-gray-100 px-2 py-1 text-xs">
+                              {doc.doc_no}
+                            </code>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {formatThDateTime(doc.created_at)}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <StatBadge
+                              value={doc._count?.details ?? doc.total_lines}
+                              unit="lot"
+                            />
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <StatBadge value={doc.total_sheets} unit="แผ่น" tone="violet" />
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {creatorLabel(doc)}
+                          </TableCell>
+                          <TableCell className="text-center">{rowActions(doc)}</TableCell>
+                        </TableRow>
                       );
                     })}
                   </TableBody>
@@ -809,6 +777,35 @@ export default function PrePrintHistoryTab({ refreshKey = 0 }: PrePrintHistoryTa
         }}
         onSuccess={handleDeleteSuccess}
       />
+
+      <Dialog
+        open={viewDoc != null}
+        onOpenChange={(open) => {
+          if (!open) setViewDoc(null);
+        }}
+      >
+        <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-3xl min-w-0">
+          <DialogHeader>
+            <DialogTitle className="flex flex-wrap items-center gap-2">
+              <Package className="h-5 w-5 shrink-0 text-violet-600" />
+              <span>รายการในเอกสาร</span>
+              {viewDoc ? (
+                <code className="rounded bg-slate-100 px-2 py-0.5 font-mono text-sm font-medium text-slate-800">
+                  {viewDoc.doc_no}
+                </code>
+              ) : null}
+            </DialogTitle>
+            <DialogDescription>
+              {viewDoc
+                ? `${formatThDateTime(viewDoc.created_at)} · ${creatorLabel(viewDoc)} · ${statusLabel(viewDoc.status)}`
+                : 'รายละเอียด lot ในเอกสารเตรียมพิมพ์'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto py-1 pr-1">
+            {viewDoc ? renderDetailBody(viewDoc) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

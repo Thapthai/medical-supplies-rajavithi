@@ -1,10 +1,10 @@
 /**
- * แสดงวันเวลาแบบไทย เช่น 2026-03-20T08:38:04.559Z → "20 มี.ค. 2569 08:38:04"
- * - ISO ที่มี Z หรือ offset → แสดงตามเวลาใน ISO (UTC) + พ.ศ.
+ * แสดงวันเวลาแบบไทย เช่น 2026-03-20T08:38:04.559Z → "20 มี.ค. 2026 08:38:04"
+ * - ISO ที่มี Z หรือ offset → แสดงตามเวลาใน ISO (UTC) + ค.ศ.
  * - สตริงวันเวลาไม่มี timezone → ถือเป็นเวลาไทย (+07:00)
  */
 const TH_DATETIME_OPTS: Intl.DateTimeFormatOptions = {
-  calendar: 'buddhist',
+  calendar: 'gregory',
   year: 'numeric',
   month: 'short',
   day: 'numeric',
@@ -43,7 +43,7 @@ export function formatDate(v: string | Date | null | undefined): string {
 export const formatReportDateTime = formatDate;
 
 const TH_DATE_ONLY_OPTS: Intl.DateTimeFormatOptions = {
-  calendar: 'buddhist',
+  calendar: 'gregory',
   year: 'numeric',
   month: 'short',
   day: 'numeric',
@@ -88,8 +88,9 @@ export function formatReportDateOnly(value?: string | Date | null): string {
 const BE_OFFSET = 543;
 
 /**
- * วันที่แบบ d/m/Y (พ.ศ. = ค.ศ. + 543) — ตรงกับ frontend formatCEToBEDMY
+ * วันที่แบบ dd/mm/Y (ค.ศ.) เช่น 04/09/2026 — ตรงกับ frontend DatePicker
  * รองรับ YYYY-MM-DD จาก API และ Date object
+ * ถ้าได้ปี พ.ศ. (>= 2400) จะแปลงเป็น ค.ศ. ก่อนแสดง
  */
 export function formatReportDateSlashBE(value?: string | Date | null): string {
   if (value == null || value === '') return '-';
@@ -107,7 +108,7 @@ export function formatReportDateSlashBE(value?: string | Date | null): string {
     const month = parseInt(m!, 10);
     const day = parseInt(d!, 10);
     if (Number.isNaN(yearCE) || Number.isNaN(month) || Number.isNaN(day)) return s;
-    return `${day}/${month}/${yearCE + BE_OFFSET}`;
+    return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${yearCE}`;
   }
   const slashMatch = /^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})/.exec(s);
   if (slashMatch) {
@@ -115,10 +116,10 @@ export function formatReportDateSlashBE(value?: string | Date | null): string {
     const day = parseInt(d!, 10);
     const month = parseInt(m!, 10);
     let year = parseInt(y!, 10);
-    if (year <= 99) year = 2500 + year;
-    else if (year >= 1900 && year < 2400) year += BE_OFFSET;
+    if (year <= 99) year = 2000 + year;
+    else if (year >= 2400) year -= BE_OFFSET;
     if (Number.isNaN(day) || Number.isNaN(month) || Number.isNaN(year)) return s;
-    return `${day}/${month}/${year}`;
+    return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`;
   }
   const parsed = new Date(s);
   if (!Number.isNaN(parsed.getTime())) {

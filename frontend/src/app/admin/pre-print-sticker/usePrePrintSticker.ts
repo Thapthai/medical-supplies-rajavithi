@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { itemsApi, stickerPrintApi } from '@/lib/api';
 import { extractItemBrand } from '@/lib/extractItemBrand';
+import { naturalCompare } from '@/lib/naturalCompare';
 import type { Item } from '@/types/item';
 import {
   ALL_BRAND_TAB,
@@ -135,7 +136,11 @@ export function usePrePrintSticker() {
         return code.includes(kw) || name.includes(kw);
       });
     }
-    return list;
+    return [...list].sort((a, b) => {
+      const byName = naturalCompare(a.itemname ?? '', b.itemname ?? '');
+      if (byName !== 0) return byName;
+      return naturalCompare(a.itemcode ?? '', b.itemcode ?? '');
+    });
   }, [allItems, selectedBrand, keywordInput]);
 
   const total = brandFilteredItems.length;

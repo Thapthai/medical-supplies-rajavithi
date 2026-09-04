@@ -15,4 +15,7 @@ export class EnvKey {
   static readonly DATABASE_HOST = 'DATABASE_HOST';
   static readonly DATABASE_PORT = 'DATABASE_PORT';
   static readonly DATABASE_CONNECTION_LIMIT = 'DATABASE_CONNECTION_LIMIT';
+
+  /** ยี่ห้ออุปกรณ์สำหรับแยกแท็บ pre-print (CSV) เช่น Primus,Sensar,TECNIS */
+  static readonly ITEM_BRANDS = 'ITEM_BRANDS';
 }

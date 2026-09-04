@@ -80,7 +80,7 @@ export default function PrePrintHistoryFilterCard({
                 id="pre-print-start-date"
                 value={filters.startDate}
                 onChange={(v) => onFilterChange('startDate', v)}
-                placeholder="วว/ดด/ปปปป (พ.ศ.)"
+                placeholder="วว/ดด/ปปปป (ค.ศ.)"
                 className={cn('h-10 shadow-sm', fieldInputClass)}
               />
             </div>
@@ -92,7 +92,7 @@ export default function PrePrintHistoryFilterCard({
                 id="pre-print-end-date"
                 value={filters.endDate}
                 onChange={(v) => onFilterChange('endDate', v)}
-                placeholder="วว/ดด/ปปปป (พ.ศ.)"
+                placeholder="วว/ดด/ปปปป (ค.ศ.)"
                 className={cn('h-10 shadow-sm', fieldInputClass)}
               />
             </div>

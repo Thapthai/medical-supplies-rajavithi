@@ -66,6 +66,7 @@ export class PrePrintStickerReportPdfService {
 
     const logoBuffer = this.getLogoBuffer();
     const reportDate = new Date().toLocaleDateString('th-TH', {
+      calendar: 'gregory',
       year: 'numeric',
       month: 'long',
       day: 'numeric',

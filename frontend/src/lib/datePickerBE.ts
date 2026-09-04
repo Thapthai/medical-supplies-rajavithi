@@ -1,18 +1,19 @@
 /**
- * ค.ศ. (CE) <-> พ.ศ. (BE) สำหรับ Date Picker
+ * วันที่สำหรับ Date Picker
  * ค่าในระบบ/API ใช้ YYYY-MM-DD (ค.ศ.)
- * การแสดงผลใน input ใช้ d/m/YYYY (พ.ศ. = ปี + 543)
+ * การแสดงผลใน input ใช้ dd/mm/YYYY (ค.ศ.) เช่น 04/09/2026
+ * ยังรับปี พ.ศ. (>= 2400) เมื่อพิมพ์/วางค่าเก่าได้
  */
 
 const BE_OFFSET = 543;
 
 function buildCEFromParts(day: number, month: number, yearRaw: number): string | null {
   if (Number.isNaN(day) || Number.isNaN(month) || Number.isNaN(yearRaw)) return null;
-  // ปี 2 หลัก → สมมติ พ.ศ. 25xx (เช่น 70 → 2570)
-  const yearBE = yearRaw <= 99 ? 2500 + yearRaw : yearRaw;
-  // ปี >= 2400 ถือเป็น พ.ศ. — น้อยกว่านั้นถือเป็น ค.ศ. ตรง ๆ
-  const yearCE = yearBE >= 2400 ? yearBE - BE_OFFSET : yearBE;
-  const date = new Date(yearCE, month - 1, day);
+  // ปี 2 หลัก → สมมติ ค.ศ. 20xx (เช่น 30 → 2030)
+  let year = yearRaw <= 99 ? 2000 + yearRaw : yearRaw;
+  // ปี >= 2400 ถือเป็น พ.ศ. (รองรับค่าเก่า)
+  if (year >= 2400) year -= BE_OFFSET;
+  const date = new Date(year, month - 1, day);
   if (Number.isNaN(date.getTime())) return null;
   if (date.getDate() !== day || date.getMonth() !== month - 1) return null;
   const yy = date.getFullYear();
@@ -22,7 +23,8 @@ function buildCEFromParts(day: number, month: number, yearRaw: number): string |
 }
 
 /**
- * แปลง YYYY-MM-DD (ค.ศ.) เป็น สตริง d/m/YYYY (พ.ศ.) สำหรับแสดงใน input
+ * แปลง YYYY-MM-DD (ค.ศ.) เป็น สตริง dd/mm/YYYY (ค.ศ.) เช่น 04/09/2026
+ * (ชื่อฟังก์ชันเดิมคงไว้เพื่อไม่ต้องแก้ import ทั้งโปรเจกต์)
  */
 export function formatCEToBEDMY(isoDate: string | null | undefined): string {
   if (!isoDate || typeof isoDate !== 'string') return '';
@@ -34,16 +36,15 @@ export function formatCEToBEDMY(isoDate: string | null | undefined): string {
   const month = parseInt(m!, 10);
   const day = parseInt(d!, 10);
   if (Number.isNaN(yearCE) || Number.isNaN(month) || Number.isNaN(day)) return trimmed;
-  const yearBE = yearCE + BE_OFFSET;
-  return `${day}/${month}/${yearBE}`;
+  return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${yearCE}`;
 }
 
 /**
  * แปลงสตริงวันที่เป็น YYYY-MM-DD (ค.ศ.) สำหรับส่ง API
  * รองรับ:
- * - d/m/yyyy, dd/mm/yyyy, วว/ดด/ปปปป (พ.ศ. หรือ ค.ศ.)
- * - ตัวเลขล้วน 8 หลัก DDMMYYYY เช่น 02092030, 05092570
- * - ตัวเลขล้วน 6 หลัก DDMMYY เช่น 050970 → 5/9/2570
+ * - d/m/yyyy, dd/mm/yyyy, วว/ดด/ปปปป (ค.ศ. หรือ พ.ศ. >= 2400)
+ * - ตัวเลขล้วน 8 หลัก DDMMYYYY เช่น 02092030
+ * - ตัวเลขล้วน 6 หลัก DDMMYY เช่น 050930 → 5/9/2030
  */
 export function parseBEDMYToCE(input: string): string | null {
   if (!input || typeof input !== 'string') return null;

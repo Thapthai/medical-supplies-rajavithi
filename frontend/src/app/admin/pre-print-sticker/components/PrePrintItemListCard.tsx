@@ -102,7 +102,7 @@ function DraftControls({
             popoverPortal
             value={draft.expireDate}
             onChange={(v) => onDraftExpireChange(row.itemcode, v)}
-            placeholder="วว/ดด/ปปปป"
+            placeholder="วว/ดด/ปปปป (ค.ศ.)"
           />
         </div>
       </div>
@@ -344,7 +344,7 @@ export default function PrePrintItemListCard({
                               popoverPortal
                               value={draft.expireDate}
                               onChange={(v) => onDraftExpireChange(row.itemcode, v)}
-                              placeholder="วว/ดด/ปปปป"
+                              placeholder="วว/ดด/ปปปป (ค.ศ.)"
                             />
                           </div>
                         </TableCell>

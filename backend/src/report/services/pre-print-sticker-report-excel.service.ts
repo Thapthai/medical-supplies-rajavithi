@@ -55,6 +55,7 @@ export class PrePrintStickerReportExcelService {
     });
 
     const reportDate = new Date().toLocaleDateString('th-TH', {
+      calendar: 'gregory',
       year: 'numeric',
       month: 'long',
       day: 'numeric',

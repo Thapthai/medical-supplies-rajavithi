@@ -47,7 +47,7 @@ export default function PrePrintSubLineRow({
         popoverPortal
         value={line.expireDate || ''}
         onChange={(v) => onExpireDateChange(line.lineId, v)}
-        placeholder="วว/ดด/ปปปป"
+        placeholder="วว/ดด/ปปปป (ค.ศ.)"
       />
     </div>
   );

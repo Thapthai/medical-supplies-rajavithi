@@ -22,7 +22,17 @@ export type PrePrintStickerPdfData = {
 
 function formatThDateTime(value: Date | string): string {
   try {
-    return new Date(value).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' });
+    return new Date(value).toLocaleString('th-TH', {
+      calendar: 'gregory',
+      timeZone: 'Asia/Bangkok',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    });
   } catch {
     return String(value);
   }
@@ -31,7 +41,13 @@ function formatThDateTime(value: Date | string): string {
 function formatThDate(value: Date | string | null | undefined): string {
   if (!value) return '—';
   try {
-    return new Date(value).toLocaleDateString('th-TH', { timeZone: 'Asia/Bangkok' });
+    return new Date(value).toLocaleDateString('th-TH', {
+      calendar: 'gregory',
+      timeZone: 'Asia/Bangkok',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
   } catch {
     return String(value);
   }

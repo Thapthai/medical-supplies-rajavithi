@@ -256,7 +256,7 @@ export default function EditPrePrintStickerDialog({
                                   popoverPortal
                                   value={line.expireDate}
                                   onChange={(v) => updateLine(line.key, { expireDate: v })}
-                                  placeholder="วว/ดด/ปปปป"
+                                  placeholder="วว/ดด/ปปปป (ค.ศ.)"
                                 />
                               </div>
                             </TableCell>

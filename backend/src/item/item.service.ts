@@ -6,7 +6,7 @@ import { CreateItemDto } from './dto/create-item.dto';
 import { UpdateItemDto } from './dto/update-item.dto';
 import { UpdateItemMinMaxDto } from './dto/update-item-minmax.dto';
 import { ItemStockDto } from './dto/item-stock.dto';
-import { extractItemBrand } from './utils/extract-item-brand';
+import { extractItemBrand, getKnownItemBrands, isKnownItemBrand } from './utils/extract-item-brand';
 import { log } from 'console';
 
 /** ค่า DB สำหรับพิมพ์สติ๊กเกอร์์ / legacy — ใส่เมื่อสร้าง Item ใหม่ถ้าไม่ส่งมาจาก client */
@@ -2610,12 +2610,12 @@ export class ItemService {
       for (const item of items) {
         const itemname = String(item.itemname ?? '').trim();
         if (!itemname) continue;
-        brandSet.add(extractItemBrand(itemname));
+        const brand = extractItemBrand(itemname);
+        if (isKnownItemBrand(brand)) brandSet.add(brand);
       }
 
-      const data = [...brandSet].sort((a, b) =>
-        a.localeCompare(b, 'th', { sensitivity: 'base' }),
-      );
+      // คงลำดับตาม ITEM_BRANDS ใน .env
+      const data = getKnownItemBrands().filter((b) => brandSet.has(b));
 
       return {
         success: true,

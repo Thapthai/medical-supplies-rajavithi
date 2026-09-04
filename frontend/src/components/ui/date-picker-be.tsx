@@ -8,8 +8,6 @@ import { Button } from '@/components/ui/button';
 import { CalendarIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-const BE_OFFSET = 543;
-
 interface DatePickerBEProps {
   /** ค่า YYYY-MM-DD (ค.ศ.) */
   value: string;
@@ -25,7 +23,7 @@ interface DatePickerBEProps {
 export function DatePickerBE({
   value,
   onChange,
-  placeholder = 'ววดดปปปป หรือ วว/ดด/ปปปป',
+  placeholder = 'วว/ดด/ปปปป',
   className,
   id,
   disabled,
@@ -101,7 +99,6 @@ export function DatePickerBE({
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = e.target.value;
     setInputText(v);
-    // พิมพ์ตัวเลขล้วนครบ 8 หลัก (DDMMYYYY) แล้วแปลงทันที — 6 หลักรอ blur/Enter
     const trimmed = v.trim();
     if (/^\d{8}$/.test(trimmed)) {
       commitInput(trimmed);
@@ -138,7 +135,6 @@ export function DatePickerBE({
 
   const viewYear = viewDate.getFullYear();
   const viewMonth = viewDate.getMonth();
-  const viewYearBE = viewYear + BE_OFFSET;
 
   const firstDay = new Date(viewYear, viewMonth, 1);
   const lastDay = new Date(viewYear, viewMonth + 1, 0);
@@ -165,7 +161,20 @@ export function DatePickerBE({
     }
   }, [open]);
 
-  const monthNames = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+  const monthNames = [
+    'ม.ค.',
+    'ก.พ.',
+    'มี.ค.',
+    'เม.ย.',
+    'พ.ค.',
+    'มิ.ย.',
+    'ก.ค.',
+    'ส.ค.',
+    'ก.ย.',
+    'ต.ค.',
+    'พ.ย.',
+    'ธ.ค.',
+  ];
 
   const calendarPanel = (
     <div
@@ -186,12 +195,12 @@ export function DatePickerBE({
           : undefined
       }
     >
-      <div className="flex items-center justify-between mb-2">
+      <div className="mb-2 flex items-center justify-between">
         <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={handlePrevMonth}>
           ‹
         </Button>
         <span className="text-sm font-medium tabular-nums">
-          {monthNames[viewMonth]} {viewYearBE}
+          {monthNames[viewMonth]} {viewYear}
         </span>
         <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={handleNextMonth}>
           ›
@@ -199,7 +208,7 @@ export function DatePickerBE({
       </div>
       <div className="grid grid-cols-7 gap-0.5 text-center text-xs">
         {['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'].map((w) => (
-          <div key={w} className="font-medium text-gray-500 py-1">
+          <div key={w} className="py-1 font-medium text-gray-500">
             {w}
           </div>
         ))}
@@ -212,15 +221,16 @@ export function DatePickerBE({
               type="button"
               className={cn(
                 'h-8 w-8 rounded hover:bg-blue-100',
-                value === `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+                value ===
+                  `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
                   ? 'bg-blue-600 text-white hover:bg-blue-700'
-                  : 'text-gray-800'
+                  : 'text-gray-800',
               )}
               onClick={() => handleSelectDay(viewYear, viewMonth + 1, d)}
             >
               {d}
             </button>
-          )
+          ),
         )}
       </div>
     </div>
@@ -245,7 +255,7 @@ export function DatePickerBE({
         onKeyDown={handleKeyDown}
         disabled={disabled}
         className={cn(
-          'min-w-0 flex-1 rounded-r-none border-r-0 font-medium shadow-none',
+          'min-w-0 flex-1 rounded-r-none border-r-0 font-medium tabular-nums shadow-none',
           isTall ? 'h-10' : 'h-9',
           className,
         )}
@@ -255,10 +265,7 @@ export function DatePickerBE({
         type="button"
         variant="outline"
         size="icon"
-        className={cn(
-          'shrink-0 rounded-l-none px-0',
-          isTall ? 'h-10 w-10' : 'h-9 w-9',
-        )}
+        className={cn('shrink-0 rounded-l-none px-0', isTall ? 'h-10 w-10' : 'h-9 w-9')}
         onClick={() => setOpen((o) => !o)}
         disabled={disabled}
         aria-label="เลือกวันที่"

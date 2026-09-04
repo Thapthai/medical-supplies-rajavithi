@@ -126,7 +126,7 @@ export function PrintStickerOrderCard({
                             popoverPortal
                             value={line.expireDate || ''}
                             onChange={(v) => onExpireDateChange(line.itemcode, v)}
-                            placeholder="วว/ดด/ปปปป (พ.ศ.)"
+                            placeholder="วว/ดด/ปปปป (ค.ศ.)"
                           />
                         </div>
                       </TableCell>
