@@ -602,6 +602,22 @@ export default function FilterSection({
             />
 
             <SearchableSelect
+              label="แผนก"
+              placeholder={
+                filters.departmentId?.trim()
+                  ? "เลือกแผนก ..."
+                  : "เลือก Division เฉพาะก่อน ถ้าต้องการกรองแผนกย่อย"
+              }
+              value={filters.subDepartmentId}
+              onValueChange={(value) => onFilterChange("subDepartmentId", value)}
+              options={subDepartmentOptions}
+              disabled={!filters.departmentId?.trim() || departmentDisabled}
+              searchPlaceholder="ค้นหารหัสหรือชื่อแผนก ..."
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-3">
+            <SearchableSelect
               label="ตู้ Cabinet"
               placeholder={
                 filters.departmentId
@@ -626,22 +642,6 @@ export default function FilterSection({
               }}
               searchPlaceholder="ค้นหารหัสหรือชื่อตู้..."
               disabled={!canPickAllScopedDepartments && !filters.departmentId?.trim()}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 gap-3">
-            <SearchableSelect
-              label="แผนก"
-              placeholder={
-                filters.departmentId?.trim()
-                  ? "เลือกแผนก ..."
-                  : "เลือก Division เฉพาะก่อน ถ้าต้องการกรองแผนกย่อย"
-              }
-              value={filters.subDepartmentId}
-              onValueChange={(value) => onFilterChange("subDepartmentId", value)}
-              options={subDepartmentOptions}
-              disabled={!filters.departmentId?.trim() || departmentDisabled}
-              searchPlaceholder="ค้นหารหัสหรือชื่อแผนก ..."
             />
           </div>
         </div>
