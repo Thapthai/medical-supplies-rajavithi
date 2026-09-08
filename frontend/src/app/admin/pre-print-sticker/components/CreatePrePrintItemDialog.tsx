@@ -16,15 +16,16 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import SearchableSelect from '@/app/admin/items/components/SearchableSelect';
 import { itemsApi } from '@/lib/api';
+import { joinItemNameWithPrefix } from '@/lib/extractItemBrand';
 import type { CreateItemDto } from '@/types/item';
 
 const fieldInputClass = 'bg-white';
 const BRAND_CUSTOM = '__custom__';
-const BRAND_SEPARATOR = ' + ';
 
 type CreatePrePrintItemDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** ส่วนหน้าก่อน - / + เช่น "AR40e | Sensar", "A1UL22 | Primus" */
   brands: string[];
   onSuccess: () => void;
 };
@@ -69,7 +70,7 @@ export default function CreatePrePrintItemDialog({
     }
     const namePart = itemNamePart.trim();
     if (namePart.length < 1) {
-      toast.error('กรุณากรอกชื่ออุปกรณ์');
+      toast.error('กรุณากรอกค่ากำลัง / ส่วนท้ายชื่อ');
       return;
     }
 
@@ -84,14 +85,13 @@ export default function CreatePrePrintItemDialog({
 
       const payload: CreateItemDto = {
         itemcode,
-        itemname: `${resolvedBrand}${BRAND_SEPARATOR}${namePart}`,
+        itemname: joinItemNameWithPrefix(resolvedBrand, namePart),
         IsSet: '0',
         IsNormal: '1',
         IsReuse: '1',
         IsCancel: 0,
         item_status: 0,
         IsStock: true,
-        // itemtypeID / อื่น ๆ ใช้ค่า default จาก backend
       };
 
       const res = await itemsApi.create(payload);
@@ -119,7 +119,7 @@ export default function CreatePrePrintItemDialog({
         <DialogHeader>
           <DialogTitle>เพิ่มอุปกรณ์ใหม่</DialogTitle>
           <DialogDescription>
-            เลือกยี่ห้อและกรอกชื่ออุปกรณ์ — รหัสระบบจะถูกสร้างให้อัตโนมัติ
+            เลือกยี่ห้อ (ส่วนหน้าก่อน - หรือ +) แล้วกรอกค่ากำลัง เช่น 34.0 D หรือ - 3.0 D
           </DialogDescription>
         </DialogHeader>
 
@@ -127,7 +127,7 @@ export default function CreatePrePrintItemDialog({
           <div className="space-y-2">
             <SearchableSelect
               label="ยี่ห้อ"
-              placeholder="เลือกยี่ห้อ"
+              placeholder="เลือกยี่ห้อ เช่น AR40e | Sensar"
               searchPlaceholder="ค้นหายี่ห้อ..."
               value={brandValue}
               onValueChange={setBrandValue}
@@ -137,7 +137,7 @@ export default function CreatePrePrintItemDialog({
             />
             {brandValue === BRAND_CUSTOM && (
               <Input
-                placeholder="พิมพ์ยี่ห้อใหม่"
+                placeholder="เช่น AR40X | Sensar"
                 value={customBrand}
                 onChange={(e) => setCustomBrand(e.target.value)}
                 className={fieldInputClass}
@@ -148,16 +148,24 @@ export default function CreatePrePrintItemDialog({
 
           <div className="space-y-2">
             <Label htmlFor="preprint-itemname">
-              ชื่ออุปกรณ์ <span className="text-red-500">*</span>
+              ค่ากำลัง / ส่วนท้าย <span className="text-red-500">*</span>
             </Label>
             <Input
               id="preprint-itemname"
-              placeholder="ชื่อรายการ"
+              placeholder="เช่น 34.0 D หรือ - 3.0 D"
               value={itemNamePart}
               onChange={(e) => setItemNamePart(e.target.value)}
               className={fieldInputClass}
               maxLength={200}
             />
+            {resolvedBrand && itemNamePart.trim() ? (
+              <p className="text-xs text-muted-foreground">
+                ชื่อที่จะบันทึก:{' '}
+                <span className="font-medium text-slate-700">
+                  {joinItemNameWithPrefix(resolvedBrand, itemNamePart)}
+                </span>
+              </p>
+            ) : null}
           </div>
 
           <DialogFooter className="border-t pt-4">

@@ -100,7 +100,7 @@ export default function StaffPrePrintStickerPage() {
       <CreatePrePrintItemDialog
         open={createItemOpen}
         onOpenChange={setCreateItemOpen}
-        brands={s.brands}
+        brands={s.modelPrefixes}
         onSuccess={() => void s.reloadAll()}
       />
     </div>

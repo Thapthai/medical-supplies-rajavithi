@@ -103,7 +103,7 @@ export default function PrePrintStickerPage() {
         <CreatePrePrintItemDialog
           open={createItemOpen}
           onOpenChange={setCreateItemOpen}
-          brands={s.brands}
+          brands={s.modelPrefixes}
           onSuccess={() => void s.reloadAll()}
         />
       </AppLayout>

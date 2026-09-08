@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { itemsApi, stickerPrintApi } from '@/lib/api';
-import { extractItemBrand } from '@/lib/extractItemBrand';
+import { extractItemBrand, extractItemModelPrefix } from '@/lib/extractItemBrand';
 import { naturalCompare } from '@/lib/naturalCompare';
 import type { Item } from '@/types/item';
 import {
@@ -451,9 +451,19 @@ export function usePrePrintSticker() {
 
   const initialLoading = loadingBrands || (loadingList && allItems.length === 0);
 
+  const modelPrefixes = useMemo(() => {
+    const set = new Set<string>();
+    for (const item of allItems) {
+      const prefix = extractItemModelPrefix(item.itemname);
+      if (prefix) set.add(prefix);
+    }
+    return [...set].sort(naturalCompare);
+  }, [allItems]);
+
   return {
     ALL_BRAND_TAB,
     brands,
+    modelPrefixes,
     loadingBrands: initialLoading,
     selectedBrand,
     onBrandChange: handleBrandChange,
