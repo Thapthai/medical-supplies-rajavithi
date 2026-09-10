@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { getSession } from 'next-auth/react';
 import { createCabinetListGetAll, createCabinetUsersApi } from '@/lib/cabinet-http-clients';
+import { getAuthLoginHref } from '@/lib/authLoginUrl';
 import type { ApiResponse, PaginatedResponse, ItemsStats } from '@/types/common';
 import type { AuthResponse, User, RegisterDto, LoginDto } from '@/types/auth';
 import type { Item, CreateItemDto, UpdateItemDto, GetItemsQuery, ItemMasterUploadResult } from '@/types/item';
@@ -87,7 +88,7 @@ api.interceptors.response.use(
 
         const currentPath = window.location.pathname;
         if (currentPath.includes('/staff/') || currentPath.includes('/admin')) {
-          window.location.href = '/auth/login';
+          window.location.href = getAuthLoginHref();
         }
       }
       // For non-staff endpoints, let the app handle the redirect

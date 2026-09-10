@@ -14,6 +14,7 @@ import { User, LogOut, Settings, ChevronDown, ZoomIn, ZoomOut } from 'lucide-rea
 import { useAuth } from '@/hooks/useAuth';
 import { signOut } from 'next-auth/react';
 import { useState, useEffect, useRef } from 'react';
+import { getAuthLoginPath } from '@/lib/authLoginUrl';
 
 export default function Navbar() {
   const { user, isAuthenticated } = useAuth();
@@ -76,9 +77,7 @@ export default function Navbar() {
   };
 
   const logout = async () => {
-    // ใช้ basePath ในการ redirect หลัง logout
-    const loginPath = basePath ? `${basePath}/auth/login` : '/auth/login';
-    await signOut({ callbackUrl: loginPath });
+    await signOut({ callbackUrl: getAuthLoginPath() });
   };
 
   return (
