@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { DatePickerBE } from '@/components/ui/date-picker-be';
+import { getTodayCE } from '@/lib/datePickerBE';
 import {
   Table,
   TableBody,
@@ -30,6 +31,7 @@ import {
   type PrePrintStickerDocument,
 } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { isExpireDateValid } from '../utils';
 
 type EditLine = {
   key: string;
@@ -152,6 +154,17 @@ export default function EditPrePrintStickerDialog({
       toast.error('กรุณากรอกวันหมดอายุให้ครบทุกรายการที่มีจำนวน');
       return;
     }
+    const pastExpire = lines.some(
+      (l) =>
+        l.copies !== '' &&
+        Number(l.copies) >= 1 &&
+        l.expireDate.trim() !== '' &&
+        !isExpireDateValid(l.expireDate),
+    );
+    if (pastExpire) {
+      toast.error('วันหมดอายุต้องไม่ต่ำกว่าวันที่ปัจจุบัน');
+      return;
+    }
 
     try {
       setLoading(true);
@@ -257,6 +270,7 @@ export default function EditPrePrintStickerDialog({
                                   value={line.expireDate}
                                   onChange={(v) => updateLine(line.key, { expireDate: v })}
                                   placeholder="วว/ดด/ปปปป (ค.ศ.)"
+                                  minDate={getTodayCE()}
                                 />
                               </div>
                             </TableCell>

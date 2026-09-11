@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { createPortal } from 'react-dom';
-import { formatCEToBEDMY, parseBEDMYToCE } from '@/lib/datePickerBE';
+import { formatCEToBEDMY, isYmdOnOrAfter, parseBEDMYToCE } from '@/lib/datePickerBE';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { CalendarIcon } from 'lucide-react';
@@ -18,6 +18,8 @@ interface DatePickerBEProps {
   disabled?: boolean;
   /** เปิดปฏิทินเป็น fixed + portal ไป body (ใช้ใน table/overflow — ไม่โดนตัดขอบกล่อง) */
   popoverPortal?: boolean;
+  /** วันต่ำสุดที่เลือกได้ YYYY-MM-DD (เช่น วันนี้ — ห้ามวันที่ย้อนหลัง) */
+  minDate?: string;
 }
 
 export function DatePickerBE({
@@ -28,12 +30,19 @@ export function DatePickerBE({
   id,
   disabled,
   popoverPortal = false,
+  minDate,
 }: DatePickerBEProps) {
+  const minYmd = (minDate ?? '').trim().slice(0, 10) || undefined;
+
   const [inputText, setInputText] = React.useState(() => formatCEToBEDMY(value));
   const [open, setOpen] = React.useState(false);
   const [viewDate, setViewDate] = React.useState(() => {
     if (value) {
       const [y, m] = value.split('-').map(Number);
+      return new Date(y, (m || 1) - 1, 1);
+    }
+    if (minYmd) {
+      const [y, m] = minYmd.split('-').map(Number);
       return new Date(y, (m || 1) - 1, 1);
     }
     return new Date();
@@ -46,17 +55,25 @@ export function DatePickerBE({
     minWidth: number;
   } | null>(null);
 
+  const isAllowed = React.useCallback(
+    (ce: string) => {
+      if (!minYmd) return true;
+      return isYmdOnOrAfter(ce, minYmd);
+    },
+    [minYmd],
+  );
+
   const commitInput = React.useCallback(
     (raw: string) => {
       const ce = parseBEDMYToCE(raw);
-      if (ce) {
+      if (ce && isAllowed(ce)) {
         onChange(ce);
         setInputText(formatCEToBEDMY(ce));
         return true;
       }
       return false;
     },
-    [onChange],
+    [onChange, isAllowed],
   );
 
   const updatePortalPlacement = React.useCallback(() => {
@@ -128,6 +145,7 @@ export function DatePickerBE({
     const mm = String(month).padStart(2, '0');
     const dd = String(day).padStart(2, '0');
     const ce = `${yy}-${mm}-${dd}`;
+    if (!isAllowed(ce)) return;
     onChange(ce);
     setInputText(formatCEToBEDMY(ce));
     setOpen(false);
@@ -145,7 +163,19 @@ export function DatePickerBE({
   for (let i = 0; i < startPad; i++) days.push(null);
   for (let d = 1; d <= daysInMonth; d++) days.push(d);
 
-  const handlePrevMonth = () => setViewDate(new Date(viewYear, viewMonth - 1, 1));
+  const minMonthStart = minYmd
+    ? (() => {
+        const [y, m] = minYmd.split('-').map(Number);
+        return new Date(y, (m || 1) - 1, 1);
+      })()
+    : null;
+  const canGoPrevMonth =
+    !minMonthStart || new Date(viewYear, viewMonth, 1).getTime() > minMonthStart.getTime();
+
+  const handlePrevMonth = () => {
+    if (!canGoPrevMonth) return;
+    setViewDate(new Date(viewYear, viewMonth - 1, 1));
+  };
   const handleNextMonth = () => setViewDate(new Date(viewYear, viewMonth + 1, 1));
 
   React.useEffect(() => {
@@ -196,7 +226,14 @@ export function DatePickerBE({
       }
     >
       <div className="mb-2 flex items-center justify-between">
-        <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={handlePrevMonth}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          onClick={handlePrevMonth}
+          disabled={!canGoPrevMonth}
+        >
           ‹
         </Button>
         <span className="text-sm font-medium tabular-nums">
@@ -212,26 +249,30 @@ export function DatePickerBE({
             {w}
           </div>
         ))}
-        {days.map((d, i) =>
-          d === null ? (
-            <div key={`e-${i}`} />
-          ) : (
+        {days.map((d, i) => {
+          if (d === null) return <div key={`e-${i}`} />;
+          const ymd = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+          const dayDisabled = Boolean(minYmd && !isYmdOnOrAfter(ymd, minYmd));
+          const selected = value === ymd;
+          return (
             <button
               key={d}
               type="button"
+              disabled={dayDisabled}
               className={cn(
-                'h-8 w-8 rounded hover:bg-blue-100',
-                value ===
-                  `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-                  ? 'bg-blue-600 text-white hover:bg-blue-700'
-                  : 'text-gray-800',
+                'h-8 w-8 rounded',
+                dayDisabled
+                  ? 'cursor-not-allowed text-gray-300'
+                  : selected
+                    ? 'bg-blue-600 text-white hover:bg-blue-700'
+                    : 'text-gray-800 hover:bg-blue-100',
               )}
               onClick={() => handleSelectDay(viewYear, viewMonth + 1, d)}
             >
               {d}
             </button>
-          ),
-        )}
+          );
+        })}
       </div>
     </div>
   );

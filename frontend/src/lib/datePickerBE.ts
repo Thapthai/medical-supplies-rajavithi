@@ -84,3 +84,11 @@ export function getTodayCE(): string {
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 }
+
+/** เปรียบเทียบ YYYY-MM-DD — true ถ้า a >= b */
+export function isYmdOnOrAfter(a: string, b: string): boolean {
+  const aa = (a ?? '').trim().slice(0, 10);
+  const bb = (b ?? '').trim().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(aa) || !/^\d{4}-\d{2}-\d{2}$/.test(bb)) return false;
+  return aa >= bb;
+}

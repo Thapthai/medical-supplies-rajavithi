@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
   Put,
   Query,
@@ -17,6 +18,7 @@ import { Request } from 'express';
 import { AuthContext, AuthGuard } from '../auth/guards/auth.guard';
 import { CreatePrePrintStickerDto } from './dto/create-pre-print-sticker.dto';
 import { UpdatePrePrintStickerDto } from './dto/update-pre-print-sticker.dto';
+import { UpdatePrePrintStickerStatusDto } from './dto/update-pre-print-sticker-status.dto';
 import { PrintLabelItemDto } from './dto/print-label-item.dto';
 import { PrintLabelItemsDto } from './dto/print-label-items.dto';
 import { StickerPrintService } from './sticker-print.service';
@@ -50,6 +52,7 @@ export class StickerPrintController {
     @Query('keyword') keyword?: string,
     @Query('start_date') startDate?: string,
     @Query('end_date') endDate?: string,
+    @Query('status') status?: string,
   ) {
     return this.stickerPrintService.listPrePrintStickers({
       page: page ? parseInt(page, 10) : undefined,
@@ -57,6 +60,7 @@ export class StickerPrintController {
       keyword,
       start_date: startDate,
       end_date: endDate,
+      status,
     });
   }
 
@@ -77,6 +81,16 @@ export class StickerPrintController {
   @Get('pre-print-stickers/:id')
   getPrePrintSticker(@Param('id', ParseIntPipe) id: number) {
     return this.stickerPrintService.getPrePrintSticker(id);
+  }
+
+  /** อัปเดตสถานะเอกสารเตรียมพิมพ์ (พิมพ์แล้ว / ยังไม่พิมพ์) */
+  @Patch('pre-print-stickers/:id/status')
+  @HttpCode(HttpStatus.OK)
+  updatePrePrintStickerStatus(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: UpdatePrePrintStickerStatusDto,
+  ) {
+    return this.stickerPrintService.updatePrePrintStickerStatus(id, body);
   }
 
   /** อัปเดตเอกสารเตรียมพิมพ์สติ๊กเกอร์ */

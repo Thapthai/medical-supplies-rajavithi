@@ -4,6 +4,7 @@ import { Minus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { DatePickerBE } from '@/components/ui/date-picker-be';
+import { getTodayCE } from '@/lib/datePickerBE';
 import { TableCell, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 import type { SelectedLine } from '../types';
@@ -48,6 +49,7 @@ export default function PrePrintSubLineRow({
         value={line.expireDate || ''}
         onChange={(v) => onExpireDateChange(line.lineId, v)}
         placeholder="วว/ดด/ปปปป (ค.ศ.)"
+        minDate={getTodayCE()}
       />
     </div>
   );

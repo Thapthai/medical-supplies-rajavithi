@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { DatePickerBE } from '@/components/ui/date-picker-be';
+import { getTodayCE } from '@/lib/datePickerBE';
 import {
   Table,
   TableBody,
@@ -98,6 +99,7 @@ function LotControls({
             value={line.expireDate || ''}
             onChange={(v) => onExpireDateChange(line.lineId, v)}
             placeholder="วว/ดด/ปปปป (ค.ศ.)"
+            minDate={getTodayCE()}
           />
         </div>
       </div>
@@ -301,6 +303,7 @@ export default function PrePrintOrderCard({
                                   value={line.expireDate || ''}
                                   onChange={(v) => onExpireDateChange(line.lineId, v)}
                                   placeholder="วว/ดด/ปปปป (ค.ศ.)"
+                                  minDate={getTodayCE()}
                                 />
                               </div>
                             </TableCell>
